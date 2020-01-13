@@ -81,6 +81,90 @@ enum ldo_levels {
 #define USB3_MODE		BIT(0) /* enables USB3 mode */
 #define DP_MODE			BIT(1) /* enables DP mode */
 
+/*usb_qmp_dp_phy: ssphy@88e8000*/
+#define PCS_DP_TXMGN_V0				0x1c0c
+#define PCS_DP_TXDEEMPH_M3P5DB_V0		0x1c28
+#define QSERDES_TXA_LANE_MODE_1			0x128c
+#define QSERDES_TXB_LANE_MODE_1			0x168c
+#define QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL2	0x14d4
+#define QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL2	0x18d4
+#define QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL3	0x14d8
+#define QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL3	0x18d8
+#define QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL4	0x14dc
+#define QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL4	0x18dc
+
+/*usb_qmp_phy: ssphy@88eb000*/
+#define PCS_TXMGN_V0				0x80c
+#define PCS_TXDEEMPH_M3P5DB_V0			0x828
+#define QSERDES_TX_LANE_MODE_1			0x28c
+#define QSERDES_RX_RX_EQU_ADAPTOR_CNTRL2	0x4d4
+#define QSERDES_RX_RX_EQU_ADAPTOR_CNTRL3	0x4d8
+#define QSERDES_RX_RX_EQU_ADAPTOR_CNTRL4	0x4dc
+
+unsigned int DP_TXMGN_V0 = 0;
+module_param(DP_TXMGN_V0, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(DP_TXMGN_V0, "QMP PHY DP TXSWING");
+
+unsigned int TXMGN_V0 = 0;
+module_param(TXMGN_V0, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(TXMGN_V0, "QMP PHY TXSWING");
+
+unsigned int DP_TXDEEMPH_M3P5DB_V0 = 0;
+module_param(DP_TXDEEMPH_M3P5DB_V0, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(DP_TXDEEMPH_M3P5DB_V0, "QMP PHY DP TXDEEMPH");
+
+unsigned int TXDEEMPH_M3P5DB_V0 = 0;
+module_param(TXDEEMPH_M3P5DB_V0, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(TXDEEMPH_M3P5DB_V0, "QMP PHY TXDEEMPH");
+
+unsigned int TXA_LANE_MODE_1 = 0;
+module_param(TXA_LANE_MODE_1, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(TXA_LANE_MODE_1, "QMP PHY TXALANMOD");
+
+unsigned int TXB_LANE_MODE_1 = 0;
+module_param(TXB_LANE_MODE_1, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(TXB_LANE_MODE_1, "QMP PHY TXBLANMOD");
+
+unsigned int TX_LANE_MODE_1 = 0;
+module_param(TX_LANE_MODE_1, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(TX_LANE_MODE_1, "QMP PHY TXLANMOD");
+
+unsigned int RXA_RX_EQU_ADAPTOR_CNTRL2 = 0;
+module_param(RXA_RX_EQU_ADAPTOR_CNTRL2, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(RXA_RX_EQU_ADAPTOR_CNTRL2, "QMP PHY RXAEQUCTL2");
+
+unsigned int RXB_RX_EQU_ADAPTOR_CNTRL2 = 0;
+module_param(RXB_RX_EQU_ADAPTOR_CNTRL2, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(RXB_RX_EQU_ADAPTOR_CNTRL2, "QMP PHY RXBEQUCTL2");
+
+unsigned int RX_RX_EQU_ADAPTOR_CNTRL2 = 0;
+module_param(RX_RX_EQU_ADAPTOR_CNTRL2, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(RX_RX_EQU_ADAPTOR_CNTRL2, "QMP PHY RXEQUCTL2");
+
+unsigned int RXA_RX_EQU_ADAPTOR_CNTRL3 = 0;
+module_param(RXA_RX_EQU_ADAPTOR_CNTRL3, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(RXA_RX_EQU_ADAPTOR_CNTRL3, "QMP PHY RXAEQUCTL3");
+
+unsigned int RXB_RX_EQU_ADAPTOR_CNTRL3 = 0;
+module_param(RXB_RX_EQU_ADAPTOR_CNTRL3, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(RXB_RX_EQU_ADAPTOR_CNTRL3, "QMP PHY RXBEQUCTL3");
+
+unsigned int RX_RX_EQU_ADAPTOR_CNTRL3 = 0;
+module_param(RX_RX_EQU_ADAPTOR_CNTRL3, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(RX_RX_EQU_ADAPTOR_CNTRL3, "QMP PHY RXEQUCTL3");
+
+unsigned int RXA_RX_EQU_ADAPTOR_CNTRL4 = 0;
+module_param(RXA_RX_EQU_ADAPTOR_CNTRL4, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(RXA_RX_EQU_ADAPTOR_CNTRL4, "QMP PHY RXAEQUCTL4");
+
+unsigned int RXB_RX_EQU_ADAPTOR_CNTRL4 = 0;
+module_param(RXB_RX_EQU_ADAPTOR_CNTRL4, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(RXB_RX_EQU_ADAPTOR_CNTRL4, "QMP PHY RXBEQUCTL4");
+
+unsigned int RX_RX_EQU_ADAPTOR_CNTRL4 = 0;
+module_param(RX_RX_EQU_ADAPTOR_CNTRL4, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(RX_RX_EQU_ADAPTOR_CNTRL4, "QMP PHY RXEQUCTL4");
+
 enum qmp_phy_rev_reg {
 	USB3_PHY_PCS_STATUS,
 	USB3_PHY_AUTONOMOUS_MODE_CTRL,
@@ -341,7 +425,7 @@ disable_fpc_redrive:
 }
 
 static int configure_phy_regs(struct usb_phy *uphy,
-				const struct qmp_reg_val *reg)
+				struct qmp_reg_val *reg)
 {
 	struct msm_ssphy_qmp *phy = container_of(uphy, struct msm_ssphy_qmp,
 					phy);
@@ -352,6 +436,60 @@ static int configure_phy_regs(struct usb_phy *uphy,
 	}
 
 	while (reg->offset != -1) {
+
+		switch (reg->offset) {
+		case PCS_DP_TXMGN_V0:
+			reg->val = DP_TXMGN_V0;
+			break;
+		case PCS_TXMGN_V0:
+			reg->val = TXMGN_V0;
+			break;
+		case PCS_DP_TXDEEMPH_M3P5DB_V0:
+			reg->val = DP_TXDEEMPH_M3P5DB_V0;
+			break;
+		case PCS_TXDEEMPH_M3P5DB_V0:
+			reg->val = TXDEEMPH_M3P5DB_V0;
+			break;
+		case QSERDES_TXA_LANE_MODE_1:
+			reg->val = TXA_LANE_MODE_1;
+			break;
+		case QSERDES_TXB_LANE_MODE_1:
+			reg->val = TXB_LANE_MODE_1;
+			break;
+		case QSERDES_TX_LANE_MODE_1:
+			reg->val = TX_LANE_MODE_1;
+			break;
+		case QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL2:
+			reg->val = RXA_RX_EQU_ADAPTOR_CNTRL2;
+			break;
+		case QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL2:
+			reg->val = RXB_RX_EQU_ADAPTOR_CNTRL2;
+			break;
+		case QSERDES_RX_RX_EQU_ADAPTOR_CNTRL2:
+			reg->val = RX_RX_EQU_ADAPTOR_CNTRL2;
+			break;
+		case QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL3:
+			reg->val = RXA_RX_EQU_ADAPTOR_CNTRL3;
+			break;
+		case QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL3:
+			reg->val = RXB_RX_EQU_ADAPTOR_CNTRL3;
+			break;
+		case QSERDES_RX_RX_EQU_ADAPTOR_CNTRL3:
+			reg->val = RX_RX_EQU_ADAPTOR_CNTRL3;
+			break;
+		case QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL4:
+			reg->val = RXA_RX_EQU_ADAPTOR_CNTRL4;
+			break;
+		case QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL4:
+			reg->val = RXB_RX_EQU_ADAPTOR_CNTRL4;
+			break;
+		case QSERDES_RX_RX_EQU_ADAPTOR_CNTRL4:
+			reg->val = RX_RX_EQU_ADAPTOR_CNTRL4;
+			break;
+		default:
+			break;
+
+		}
 		writel_relaxed(reg->val, phy->base + reg->offset);
 		if (reg->delay)
 			usleep_range(reg->delay, reg->delay + 10);
@@ -452,7 +590,7 @@ static int msm_ssphy_qmp_init(struct usb_phy *uphy)
 					phy);
 	int ret;
 	unsigned int init_timeout_usec = INIT_MAX_TIME_USEC;
-	const struct qmp_reg_val *reg = NULL;
+	struct qmp_reg_val *reg = NULL;
 
 	dev_dbg(uphy->dev, "Initializing QMP phy\n");
 
@@ -818,12 +956,41 @@ static void msm_ssphy_qmp_enable_clks(struct msm_ssphy_qmp *phy, bool on)
 	}
 }
 
+static int reg_offset;
+
+static ssize_t check_reg_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	struct msm_ssphy_qmp *phy = dev_get_drvdata(dev);
+	u32 reg_value;
+
+	reg_value = readl_relaxed(phy->base + reg_offset);
+
+	dev_info(dev, "reg_value=0x%x\n", reg_value);
+
+	return snprintf(buf, PAGE_SIZE, "0x%x\n", (u8)reg_value);
+}
+
+static ssize_t check_reg_store(struct device *dev, struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+
+	sscanf(buf, "%x", &reg_offset);
+
+	dev_info(dev, "reg_offset=0x%x\n", reg_offset);
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(check_reg);
+
 static int msm_ssphy_qmp_probe(struct platform_device *pdev)
 {
 	struct msm_ssphy_qmp *phy;
 	struct device *dev = &pdev->dev;
 	struct resource *res;
 	int ret = 0, size = 0, len;
+	struct qmp_reg_val *reg;
 
 	phy = devm_kzalloc(dev, sizeof(*phy), GFP_KERNEL);
 	if (!phy)
@@ -968,6 +1135,68 @@ static int msm_ssphy_qmp_probe(struct platform_device *pdev)
 			return -EINVAL;
 		}
 	}
+
+	reg = (struct qmp_reg_val *)phy->qmp_phy_init_seq;
+
+	while (reg->offset != -1) {
+
+		switch (reg->offset) {
+		case PCS_DP_TXMGN_V0:
+			DP_TXMGN_V0 = reg->val;
+			break;
+		case PCS_TXMGN_V0:
+			TXMGN_V0= reg->val;
+			break;
+		case PCS_DP_TXDEEMPH_M3P5DB_V0:
+			DP_TXDEEMPH_M3P5DB_V0 = 0x13;
+			break;
+		case PCS_TXDEEMPH_M3P5DB_V0:
+			TXDEEMPH_M3P5DB_V0 = reg->val;
+			break;
+		case QSERDES_TXA_LANE_MODE_1:
+			TXA_LANE_MODE_1 = reg->val;
+			break;
+		case QSERDES_TXB_LANE_MODE_1:
+			TXB_LANE_MODE_1 = reg->val;
+			break;
+		case QSERDES_TX_LANE_MODE_1:
+			TX_LANE_MODE_1 = reg->val;
+			break;
+		case QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL2:
+			RXA_RX_EQU_ADAPTOR_CNTRL2 = reg->val;
+			break;
+		case QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL2:
+			RXB_RX_EQU_ADAPTOR_CNTRL2 = reg->val;
+			break;
+		case QSERDES_RX_RX_EQU_ADAPTOR_CNTRL2:
+			RX_RX_EQU_ADAPTOR_CNTRL2 = reg->val;
+			break;
+		case QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL3:
+			RXA_RX_EQU_ADAPTOR_CNTRL3 = reg->val;
+			break;
+		case QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL3:
+			RXB_RX_EQU_ADAPTOR_CNTRL3 = reg->val;
+			break;
+		case QSERDES_RX_RX_EQU_ADAPTOR_CNTRL3:
+			RX_RX_EQU_ADAPTOR_CNTRL3 = reg->val;
+			break;
+		case QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL4:
+			RXA_RX_EQU_ADAPTOR_CNTRL4 = reg->val;
+			break;
+		case QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL4:
+			RXB_RX_EQU_ADAPTOR_CNTRL4 = reg->val;
+			break;
+		case QSERDES_RX_RX_EQU_ADAPTOR_CNTRL4:
+			RX_RX_EQU_ADAPTOR_CNTRL4 = reg->val;
+			break;
+		default:
+			break;
+
+		}
+		reg++;
+	}
+
+	device_create_file(&pdev->dev, &dev_attr_check_reg);
 
 	/* Set default core voltage values */
 	phy->core_voltage_levels[VOLTAGE_LEVEL_NONE] = 0;

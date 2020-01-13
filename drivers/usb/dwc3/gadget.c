@@ -2208,6 +2208,9 @@ static int dwc3_gadget_vbus_session(struct usb_gadget *_gadget, int is_active)
 {
 	struct dwc3 *dwc = gadget_to_dwc(_gadget);
 	unsigned long flags;
+	char *udc1[2] = {"UDC_NAME=a600000.dwc3", NULL};
+	char *udc2[2] = {"UDC_NAME=a800000.dwc3", NULL};
+	char *udc_name[2];
 
 	if (!dwc->is_drd)
 		return -EPERM;
@@ -2215,6 +2218,21 @@ static int dwc3_gadget_vbus_session(struct usb_gadget *_gadget, int is_active)
 	is_active = !!is_active;
 
 	dbg_event(0xFF, "VbusSess", is_active);
+
+	if (is_active) {
+
+		if (!strcmp(&udc1[0][9], kobject_name(&dwc->dev->kobj))) {
+			udc_name[0] = udc1[0];
+			udc_name[1] = udc1[1];
+		} else {
+			udc_name[0] = udc2[0];
+			udc_name[1] = udc2[1];
+		}
+
+		dev_info(dwc->dev, "udc event : %s\n", udc_name[0]);
+		kobject_uevent_env(&dwc->dev->kobj, KOBJ_CHANGE, udc_name);
+	}
+
 	spin_lock_irqsave(&dwc->lock, flags);
 
 	/* Mark that the vbus was powered */
@@ -2476,7 +2494,7 @@ static int dwc3_gadget_init_hw_endpoints(struct dwc3 *dwc,
 
 		/* Reserve EPs at the end for GSI based on gsi_ep_count */
 		if ((gsi_ep_index < gsi_ep_count) &&
-				(i > (num - 1 - gsi_ep_count))) {
+				(i == 6 || i == 7)) {
 			gsi_ep_index++;
 			/* For GSI EPs, name eps as "gsi-epin" or "gsi-epout" */
 			snprintf(dep->name, sizeof(dep->name), "%s",
@@ -2915,12 +2933,15 @@ static void dwc3_endpoint_interrupt(struct dwc3 *dwc,
 static void dwc3_disconnect_gadget(struct dwc3 *dwc)
 {
 	struct usb_gadget_driver *gadget_driver;
+	struct usb_gadget *gadget = &dwc->gadget;
 
 	if (dwc->gadget_driver && dwc->gadget_driver->disconnect) {
 		gadget_driver = dwc->gadget_driver;
 		spin_unlock(&dwc->lock);
 		dbg_event(0xFF, "DISCONNECT", 0);
+		gadget->dwc_disconnect = true;
 		gadget_driver->disconnect(&dwc->gadget);
+		gadget->dwc_disconnect = false;
 		spin_lock(&dwc->lock);
 	}
 }
@@ -3074,7 +3095,7 @@ static void dwc3_gadget_disconnect_interrupt(struct dwc3 *dwc)
 	int			reg;
 
 	dbg_event(0xFF, "DISCONNECT INT", 0);
-	dev_dbg(dwc->dev, "Notify OTG from %s\n", __func__);
+	dev_info(dwc->dev, "Notify OTG from %s\n", __func__);
 	dwc->b_suspend = false;
 	dwc3_notify_event(dwc, DWC3_CONTROLLER_NOTIFY_OTG_EVENT, 0);
 
@@ -3134,7 +3155,7 @@ static void dwc3_gadget_reset_interrupt(struct dwc3 *dwc)
 	}
 
 	dbg_event(0xFF, "BUS RESET", 0);
-	dev_dbg(dwc->dev, "Notify OTG from %s\n", __func__);
+	dev_info(dwc->dev, "Notify OTG from %s\n", __func__);
 	dwc->b_suspend = false;
 	dwc3_notify_event(dwc, DWC3_CONTROLLER_NOTIFY_OTG_EVENT, 0);
 
@@ -3337,7 +3358,7 @@ static void dwc3_gadget_wakeup_interrupt(struct dwc3 *dwc, bool remote_wakeup)
 {
 	bool perform_resume = true;
 
-	dev_dbg(dwc->dev, "%s\n", __func__);
+	dev_info(dwc->dev, "%s\n", __func__);
 
 	dbg_event(0xFF, "WAKEUP", remote_wakeup);
 	/*
@@ -3482,7 +3503,7 @@ static void dwc3_gadget_suspend_interrupt(struct dwc3 *dwc,
 	enum dwc3_link_state    next = evtinfo & DWC3_LINK_STATE_MASK;
 
 	dbg_event(0xFF, "SUSPEND INT", 0);
-	dev_dbg(dwc->dev, "%s Entry to %d\n", __func__, next);
+	dev_info_ratelimited(dwc->dev, "%s Entry to %d\n", __func__, next);
 
 	if (dwc->link_state != next && next == DWC3_LINK_STATE_U3) {
 		/*

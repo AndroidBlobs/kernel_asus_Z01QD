@@ -344,6 +344,7 @@ static int xhci_abort_cmd_ring(struct xhci_hcd *xhci, unsigned long flags)
 	if (ret < 0) {
 		xhci_err(xhci,
 			 "Stop command ring failed, maybe the host is dead\n");
+		pr_info("[USB] %s Stop command ring failed, maybe the host is dead\n", __func__);
 		xhci->xhc_state |= XHCI_STATE_DYING;
 		xhci_halt(xhci);
 		return -ESHUTDOWN;

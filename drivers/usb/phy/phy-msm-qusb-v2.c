@@ -81,6 +81,175 @@
 
 /* STAT5 register bits */
 #define VSTATUS_PLL_LOCK_STATUS_MASK	BIT(0)
+#define PHY_INIT_HARCODE
+
+int qusb1_hardcode_phy_init_seq[] = {
+			    0x23, 0x210, /* PWR_CTRL1 */
+			    0x03, 0x04,  /* PLL_ANALOG_CONTROLS_TWO */
+			    0x7c, 0x18c, /* PLL_CLOCK_INVERTERS */
+			    0x80, 0x2c,  /* PLL_CMODE */
+			    0x0a, 0x184, /* PLL_LOCK_DELAY */
+			    0x19, 0xb4,  /* PLL_DIGITAL_TIMERS_TWO */
+			    0x40, 0x194, /* PLL_BIAS_CONTROL_1 */
+			    0x16, 0x198, /* PLL_BIAS_CONTROL_2 */
+			    0x21, 0x214, /* PWR_CTRL2 */
+			    0x00, 0x220, /* IMP_CTRL1 */
+			    0x58, 0x224, /* IMP_CTRL2 */
+			    0x35, 0x240, /* TUNE1 */
+			    0x24, 0x244, /* TUNE2 */
+			    0xca, 0x248, /* TUNE3 */
+			    0x08, 0x24c, /* TUNE4 */
+			    0x03, 0x250, /* TUNE5 */
+			    0x00, 0x23c, /* CHG_CTRL2 */
+			    0x22, 0x210  /* PWR_CTRL1 */
+};
+
+int qusb1_hardcode_phy_host_init_seq[] = {
+			    0x23, 0x210, /* PWR_CTRL1 */
+			    0x03, 0x04,  /* PLL_ANALOG_CONTROLS_TWO */
+			    0x7c, 0x18c, /* PLL_CLOCK_INVERTERS */
+			    0x80, 0x2c,  /* PLL_CMODE */
+			    0x0a, 0x184, /* PLL_LOCK_DELAY */
+			    0x19, 0xb4,  /* PLL_DIGITAL_TIMERS_TWO */
+			    0x40, 0x194, /* PLL_BIAS_CONTROL_1 */
+			    0x19, 0x198, /* PLL_BIAS_CONTROL_2 */
+			    0x21, 0x214, /* PWR_CTRL2 */
+			    0x00, 0x220, /* IMP_CTRL1 */
+			    0x58, 0x224, /* IMP_CTRL2 */
+			    0x35, 0x240, /* TUNE1 */
+			    0x2b, 0x244, /* TUNE2 */
+			    0xca, 0x248, /* TUNE3 */
+			    0x04, 0x24c, /* TUNE4 */
+			    0x03, 0x250, /* TUNE5 */
+			    0x00, 0x23c, /* CHG_CTRL2 */
+			    0x22, 0x210  /* PWR_CTRL1 */
+};
+
+int qusb2_hardcode_phy_init_seq[] = {
+			    0x23, 0x210, /* PWR_CTRL1 */
+			    0x03, 0x04,  /* PLL_ANALOG_CONTROLS_TWO */
+			    0x7c, 0x18c, /* PLL_CLOCK_INVERTERS */
+			    0x80, 0x2c,  /* PLL_CMODE */
+			    0x0a, 0x184, /* PLL_LOCK_DELAY */
+			    0x19, 0xb4,  /* PLL_DIGITAL_TIMERS_TWO */
+			    0x40, 0x194, /* PLL_BIAS_CONTROL_1 */
+			    0x15, 0x198, /* PLL_BIAS_CONTROL_2 */
+			    0x21, 0x214, /* PWR_CTRL2 */
+			    0x00, 0x220, /* IMP_CTRL1 */
+			    0x58, 0x224, /* IMP_CTRL2 */
+			    0x37, 0x240, /* TUNE1 */
+			    0x2a, 0x244, /* TUNE2 */
+			    0xca, 0x248, /* TUNE3 */
+			    0xe2, 0x24c, /* TUNE4 */
+			    0x03, 0x250, /* TUNE5 */
+			    0x00, 0x23c, /* CHG_CTRL2 */
+			    0x22, 0x210  /* PWR_CTRL1 */
+};
+
+int qusb2_hardcode_phy_host_init_seq[] = {
+			    0x23, 0x210, /* PWR_CTRL1 */
+			    0x03, 0x04,  /* PLL_ANALOG_CONTROLS_TWO */
+			    0x7c, 0x18c, /* PLL_CLOCK_INVERTERS */
+			    0x80, 0x2c,  /* PLL_CMODE */
+			    0x0a, 0x184, /* PLL_LOCK_DELAY */
+			    0x19, 0xb4,  /* PLL_DIGITAL_TIMERS_TWO */
+			    0x40, 0x194, /* PLL_BIAS_CONTROL_1 */
+			    0x15, 0x198, /* PLL_BIAS_CONTROL_2 */
+			    0x21, 0x214, /* PWR_CTRL2 */
+			    0x00, 0x220, /* IMP_CTRL1 */
+			    0x58, 0x224, /* IMP_CTRL2 */
+			    0x37, 0x240, /* TUNE1 */
+			    0x2f, 0x244, /* TUNE2 */
+			    0xca, 0x248, /* TUNE3 */
+			    0x64, 0x24c, /* TUNE4 */
+			    0x03, 0x250, /* TUNE5 */
+			    0x00, 0x23c, /* CHG_CTRL2 */
+			    0x22, 0x210  /* PWR_CTRL1 */
+};
+
+int qusb1_hardcode_pr_phy_init_seq[] = {
+			    0x23, 0x210, /* PWR_CTRL1 */
+			    0x03, 0x04,  /* PLL_ANALOG_CONTROLS_TWO */
+			    0x7c, 0x18c, /* PLL_CLOCK_INVERTERS */
+			    0x80, 0x2c,  /* PLL_CMODE */
+			    0x0a, 0x184, /* PLL_LOCK_DELAY */
+			    0x19, 0xb4,  /* PLL_DIGITAL_TIMERS_TWO */
+			    0x40, 0x194, /* PLL_BIAS_CONTROL_1 */
+			    0x19, 0x198, /* PLL_BIAS_CONTROL_2 */
+			    0x21, 0x214, /* PWR_CTRL2 */
+			    0x00, 0x220, /* IMP_CTRL1 */
+			    0x58, 0x224, /* IMP_CTRL2 */
+			    0x07, 0x240, /* TUNE1 */
+			    0x24, 0x244, /* TUNE2 */
+			    0xca, 0x248, /* TUNE3 */
+			    0x08, 0x24c, /* TUNE4 */
+			    0x03, 0x250, /* TUNE5 */
+			    0x00, 0x23c, /* CHG_CTRL2 */
+			    0x22, 0x210  /* PWR_CTRL1 */
+};
+
+int qusb1_hardcode_pr_phy_host_init_seq[] = {
+			    0x23, 0x210, /* PWR_CTRL1 */
+			    0x03, 0x04,  /* PLL_ANALOG_CONTROLS_TWO */
+			    0x7c, 0x18c, /* PLL_CLOCK_INVERTERS */
+			    0x80, 0x2c,  /* PLL_CMODE */
+			    0x0a, 0x184, /* PLL_LOCK_DELAY */
+			    0x19, 0xb4,  /* PLL_DIGITAL_TIMERS_TWO */
+			    0x40, 0x194, /* PLL_BIAS_CONTROL_1 */
+			    0x16, 0x198, /* PLL_BIAS_CONTROL_2 */
+			    0x21, 0x214, /* PWR_CTRL2 */
+			    0x00, 0x220, /* IMP_CTRL1 */
+			    0x58, 0x224, /* IMP_CTRL2 */
+			    0x07, 0x240, /* TUNE1 */
+			    0x2b, 0x244, /* TUNE2 */
+			    0xca, 0x248, /* TUNE3 */
+			    0x04, 0x24c, /* TUNE4 */
+			    0x03, 0x250, /* TUNE5 */
+			    0x00, 0x23c, /* CHG_CTRL2 */
+			    0x22, 0x210  /* PWR_CTRL1 */
+};
+
+int qusb2_hardcode_pr_phy_init_seq[] = {
+			    0x23, 0x210, /* PWR_CTRL1 */
+			    0x03, 0x04,  /* PLL_ANALOG_CONTROLS_TWO */
+			    0x7c, 0x18c, /* PLL_CLOCK_INVERTERS */
+			    0x80, 0x2c,  /* PLL_CMODE */
+			    0x0a, 0x184, /* PLL_LOCK_DELAY */
+			    0x19, 0xb4,  /* PLL_DIGITAL_TIMERS_TWO */
+			    0x40, 0x194, /* PLL_BIAS_CONTROL_1 */
+			    0x10, 0x198, /* PLL_BIAS_CONTROL_2 */
+			    0x21, 0x214, /* PWR_CTRL2 */
+			    0x00, 0x220, /* IMP_CTRL1 */
+			    0x58, 0x224, /* IMP_CTRL2 */
+			    0x07, 0x240, /* TUNE1 */
+			    0x2a, 0x244, /* TUNE2 */
+			    0xca, 0x248, /* TUNE3 */
+			    0xe2, 0x24c, /* TUNE4 */
+			    0x03, 0x250, /* TUNE5 */
+			    0x00, 0x23c, /* CHG_CTRL2 */
+			    0x22, 0x210  /* PWR_CTRL1 */
+};
+
+int qusb2_hardcode_pr_phy_host_init_seq[] = {
+			    0x23, 0x210, /* PWR_CTRL1 */
+			    0x03, 0x04,  /* PLL_ANALOG_CONTROLS_TWO */
+			    0x7c, 0x18c, /* PLL_CLOCK_INVERTERS */
+			    0x80, 0x2c,  /* PLL_CMODE */
+			    0x0a, 0x184, /* PLL_LOCK_DELAY */
+			    0x19, 0xb4,  /* PLL_DIGITAL_TIMERS_TWO */
+			    0x40, 0x194, /* PLL_BIAS_CONTROL_1 */
+			    0x10, 0x198, /* PLL_BIAS_CONTROL_2 */
+			    0x21, 0x214, /* PWR_CTRL2 */
+			    0x00, 0x220, /* IMP_CTRL1 */
+			    0x58, 0x224, /* IMP_CTRL2 */
+			    0x07, 0x240, /* TUNE1 */
+			    0x2b, 0x244, /* TUNE2 */
+			    0xca, 0x248, /* TUNE3 */
+			    0x64, 0x24c, /* TUNE4 */
+			    0x03, 0x250, /* TUNE5 */
+			    0x00, 0x23c, /* CHG_CTRL2 */
+			    0x22, 0x210  /* PWR_CTRL1 */
+};
 
 enum qusb_phy_reg {
 	PORT_TUNE1,
@@ -118,6 +287,7 @@ struct qusb_phy {
 	int			*qusb_phy_init_seq;
 	int			host_init_seq_len;
 	int			*qusb_phy_host_init_seq;
+	int			pll_bais;
 
 	unsigned int		*phy_reg;
 	int			qusb_phy_reg_offset_cnt;
@@ -419,8 +589,10 @@ done:
 
 static void qusb_phy_get_tune1_param(struct qusb_phy *qphy)
 {
+	struct device *dev = qphy->phy.dev;
 	u8 reg;
 	u32 bit_mask = 1;
+	u32 tune2_val;
 
 	pr_debug("%s(): num_of_bits:%d bit_pos:%d\n", __func__,
 				qphy->efuse_num_of_bits,
@@ -439,7 +611,14 @@ static void qusb_phy_get_tune1_param(struct qusb_phy *qphy)
 
 	qphy->tune_val = TUNE_VAL_MASK(qphy->tune_val,
 				qphy->efuse_bit_pos, bit_mask);
+
+	if(!strcmp("88e3000.qusb", dev_name(dev))) {
+		tune2_val = readl_relaxed(qphy->efuse_reg + 4);
+		qphy->tune_val |= ((tune2_val & 0x03) << 2);
+	}
+
 	reg = readb_relaxed(qphy->base + qphy->phy_reg[PORT_TUNE1]);
+	pr_info("[USB] %s %s tune_val = %d\n", __func__, dev_name(dev), qphy->tune_val);
 	if (qphy->tune_val) {
 		reg = reg & 0x0f;
 		reg |= (qphy->tune_val << 4);
@@ -496,7 +675,7 @@ static void qusb_phy_host_init(struct usb_phy *phy)
 	int p_index;
 	struct qusb_phy *qphy = container_of(phy, struct qusb_phy, phy);
 
-	dev_dbg(phy->dev, "%s\n", __func__);
+	dev_info(phy->dev, "%s\n", __func__);
 
 	qusb_phy_write_seq(qphy->base, qphy->qusb_phy_host_init_seq,
 			qphy->host_init_seq_len, 0);
@@ -538,8 +717,8 @@ static void qusb_phy_host_init(struct usb_phy *phy)
 	}
 
 	if (qphy->refgen_north_bg_reg && qphy->override_bias_ctrl2)
-		if (readl_relaxed(qphy->refgen_north_bg_reg) & BANDGAP_BYPASS)
-			writel_relaxed(BIAS_CTRL_2_OVERRIDE_VAL,
+		if (!(readl_relaxed(qphy->refgen_north_bg_reg) & BANDGAP_BYPASS))
+			writel_relaxed(qphy->pll_bais,
 				qphy->base + qphy->phy_reg[BIAS_CTRL_2]);
 
 	if (qphy->bias_ctrl2)
@@ -549,6 +728,15 @@ static void qusb_phy_host_init(struct usb_phy *phy)
 	/* Ensure above write is completed before turning ON ref clk */
 	wmb();
 
+	for (p_index = 0; p_index < 5; p_index++) {
+		printk("QUSB2PHY_PORT_TUNE%d = 0x%02x", p_index + 1,
+				(u8)readl_relaxed(qphy->base +
+					qphy->phy_reg[PORT_TUNE1] + (4 * p_index)));
+	}
+
+	printk("QUSB2PHY_PORT_PLLBIAS = 0x%02x", (u8)readl_relaxed(qphy->base + qphy->phy_reg[BIAS_CTRL_2]));
+	if (qphy->refgen_north_bg_reg)
+		printk("QUSB2PHY_PORT_REFNORTHBG = 0x%02x", (u8)readl_relaxed(qphy->refgen_north_bg_reg));
 	/* Require to get phy pll lock successfully */
 	usleep_range(150, 160);
 
@@ -566,14 +754,14 @@ static int qusb_phy_init(struct usb_phy *phy)
 	int ret, p_index;
 	u8 reg;
 
-	dev_dbg(phy->dev, "%s\n", __func__);
+	dev_info(phy->dev, "%s\n", __func__);
 
 	ret = qusb_phy_enable_power(qphy, true);
 	if (ret)
 		return ret;
+	qphy->dpdm_enable = true;
 
 	qusb_phy_enable_clocks(qphy, true);
-
 	qusb_phy_reset(qphy);
 
 	if (qphy->qusb_phy_host_init_seq && qphy->phy.flags & PHY_HOST_MODE) {
@@ -633,8 +821,8 @@ static int qusb_phy_init(struct usb_phy *phy)
 	}
 
 	if (qphy->refgen_north_bg_reg && qphy->override_bias_ctrl2)
-		if (readl_relaxed(qphy->refgen_north_bg_reg) & BANDGAP_BYPASS)
-			writel_relaxed(BIAS_CTRL_2_OVERRIDE_VAL,
+		if (!(readl_relaxed(qphy->refgen_north_bg_reg) & BANDGAP_BYPASS))
+			writel_relaxed(qphy->pll_bais,
 				qphy->base + qphy->phy_reg[BIAS_CTRL_2]);
 
 	if (qphy->bias_ctrl2)
@@ -652,6 +840,15 @@ static int qusb_phy_init(struct usb_phy *phy)
 	/* Ensure above write is completed before turning ON ref clk */
 	wmb();
 
+	for (p_index = 0; p_index < 5; p_index++) {
+		printk("QUSB2PHY_PORT_TUNE%d = 0x%02x", p_index + 1, 
+				(u8)readl_relaxed(qphy->base + 
+					qphy->phy_reg[PORT_TUNE1] + (4 * p_index)));
+	}
+
+	printk("QUSB2PHY_PORT_PLLBIAS = 0x%02x", (u8)readl_relaxed(qphy->base + qphy->phy_reg[BIAS_CTRL_2]));
+	if (qphy->refgen_north_bg_reg)
+		printk("QUSB2PHY_PORT_REFNORTHBG = 0x%02x", (u8)readl_relaxed(qphy->refgen_north_bg_reg));
 	/* Require to get phy pll lock successfully */
 	usleep_range(150, 160);
 
@@ -703,11 +900,12 @@ static void qusb_phy_enable_ext_pulldown(struct usb_phy *phy)
 static void qusb_phy_shutdown(struct usb_phy *phy)
 {
 	struct qusb_phy *qphy = container_of(phy, struct qusb_phy, phy);
-
+	int ret = 0;
 	dev_dbg(phy->dev, "%s\n", __func__);
 
-	qusb_phy_enable_power(qphy, false);
-
+	ret = qusb_phy_enable_power(qphy, false);
+	if (!ret)
+		qphy->dpdm_enable = false;
 }
 
 static u32 qusb_phy_get_linestate(struct qusb_phy *qphy)
@@ -734,7 +932,7 @@ static int qusb_phy_set_suspend(struct usb_phy *phy, int suspend)
 {
 	struct qusb_phy *qphy = container_of(phy, struct qusb_phy, phy);
 	u32 linestate = 0, intr_mask = 0;
-
+	int ret = 0;
 	if (qphy->suspended && suspend) {
 		dev_dbg(phy->dev, "%s: USB PHY is already suspended\n",
 			__func__);
@@ -790,7 +988,9 @@ static int qusb_phy_set_suspend(struct usb_phy *phy, int suspend)
 				qphy->base + qphy->phy_reg[INTR_CTRL]);
 			qusb_phy_reset(qphy);
 			qusb_phy_enable_clocks(qphy, false);
-			qusb_phy_enable_power(qphy, false);
+			ret = qusb_phy_enable_power(qphy, false);
+			if(!ret)
+				qphy->dpdm_enable = false;
 		}
 		qphy->suspended = true;
 	} else {
@@ -1222,6 +1422,38 @@ static int qusb_phy_probe(struct platform_device *pdev)
 	}
 
 	size = 0;
+#ifdef PHY_INIT_HARCODE
+	if (!strcmp("88e2000.qusb", dev_name(dev))) {
+		if (g_ASUS_hwID >= ZS600KL_PR1) {
+			qphy->qusb_phy_init_seq = qusb1_hardcode_pr_phy_init_seq;
+			qphy->init_seq_len = sizeof(qusb1_hardcode_pr_phy_init_seq) / sizeof(*qusb1_hardcode_pr_phy_init_seq);
+			qphy->qusb_phy_host_init_seq = qusb1_hardcode_pr_phy_host_init_seq;
+			qphy->host_init_seq_len = sizeof(qusb1_hardcode_pr_phy_host_init_seq) / sizeof(*qusb1_hardcode_pr_phy_host_init_seq);
+			qphy->pll_bais = 0x11;
+		} else {
+			qphy->qusb_phy_init_seq = qusb1_hardcode_phy_init_seq;
+			qphy->init_seq_len = sizeof(qusb1_hardcode_phy_init_seq) / sizeof(*qusb1_hardcode_phy_init_seq);
+			qphy->qusb_phy_host_init_seq = qusb1_hardcode_phy_host_init_seq;
+			qphy->host_init_seq_len = sizeof(qusb1_hardcode_phy_host_init_seq) / sizeof(*qusb1_hardcode_phy_host_init_seq);
+			qphy->pll_bais = 0x11;
+
+		}
+	} else {
+		if (g_ASUS_hwID >= ZS600KL_PR1) {
+			qphy->qusb_phy_init_seq = qusb2_hardcode_pr_phy_init_seq;
+			qphy->init_seq_len = sizeof(qusb2_hardcode_pr_phy_init_seq) / sizeof(*qusb2_hardcode_pr_phy_init_seq);
+			qphy->qusb_phy_host_init_seq = qusb2_hardcode_pr_phy_host_init_seq;
+			qphy->host_init_seq_len = sizeof(qusb2_hardcode_pr_phy_host_init_seq) / sizeof(*qusb2_hardcode_pr_phy_host_init_seq);
+			qphy->pll_bais = 0x10;
+		} else {
+			qphy->qusb_phy_init_seq = qusb2_hardcode_phy_init_seq;
+			qphy->init_seq_len = sizeof(qusb2_hardcode_phy_init_seq) / sizeof(*qusb2_hardcode_phy_init_seq);
+			qphy->qusb_phy_host_init_seq = qusb2_hardcode_phy_host_init_seq;
+			qphy->host_init_seq_len = sizeof(qusb2_hardcode_phy_host_init_seq) / sizeof(*qusb2_hardcode_phy_host_init_seq);
+			qphy->pll_bais = 0x10;
+		}
+	}
+#else
 	of_get_property(dev->of_node, "qcom,qusb-phy-init-seq", &size);
 	if (size) {
 		qphy->qusb_phy_init_seq = devm_kzalloc(dev,
@@ -1260,7 +1492,7 @@ static int qusb_phy_probe(struct platform_device *pdev)
 		else
 			return -ENOMEM;
 	}
-
+#endif
 	qphy->host_chirp_erratum = of_property_read_bool(dev->of_node,
 					"qcom,host-chirp-erratum");
 
@@ -1358,10 +1590,13 @@ skip_pinctrl_config:
 static int qusb_phy_remove(struct platform_device *pdev)
 {
 	struct qusb_phy *qphy = platform_get_drvdata(pdev);
+	int ret = 0;
 
 	usb_remove_phy(&qphy->phy);
 	qusb_phy_enable_clocks(qphy, false);
-	qusb_phy_enable_power(qphy, false);
+	ret = qusb_phy_enable_power(qphy, false);
+	if (!ret)
+		qphy->dpdm_enable = false;
 	debugfs_remove_recursive(qphy->root);
 
 	return 0;

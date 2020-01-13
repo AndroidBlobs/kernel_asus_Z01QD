@@ -90,7 +90,7 @@ config USB_DWC3_KEYSTONE
 config USB_DWC3_OF_SIMPLE
        tristate "Generic OF Simple Glue Layer"
        depends on OF && COMMON_CLK
-       default USB_DWC3
+       default n
        help
          Support USB2/3 functionality in simple SoC integrations.
 	 Currently supports Xilinx and Qualcomm DWC USB3 IP.
@@ -111,4 +111,10 @@ config USB_DWC3_MSM
 	help
 	  Applicable to QTI MSM Platforms with DesignWare Core USB3 IP,
 	  say 'Y' or 'M' if you have one such device.
+
+config USB_VD_TEST
+	tristate "Add interface of set typeC orientation"
+	depends on USB_DWC3_MSM
+	help
+	  Only for VD USB-IF 3.0 Tx test.
 endif

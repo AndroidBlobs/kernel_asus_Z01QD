@@ -92,6 +92,9 @@ static char quirks[128];
 module_param_string(quirks, quirks, sizeof(quirks), S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(quirks, "supplemental list of device IDs and their quirks");
 
+static unsigned int disk_count = 0;
+module_param(disk_count, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(delay_use, "USB disk count, not contain default station SD card");
 
 /*
  * The entries in this table correspond, line for line,
@@ -965,8 +968,16 @@ int usb_stor_probe1(struct us_data **pus,
 	struct us_data *us;
 	int result;
 
-	dev_info(&intf->dev, "USB Mass Storage device detected\n");
+	struct usb_device *dev = interface_to_usbdev(intf);
 
+	dev_info(&intf->dev, "USB Mass Storage device detected\n");
+	pr_info("[USB_stor] idVendor=0x%x, idProduct=0x%x\n", dev->descriptor.idVendor, dev->descriptor.idProduct);
+	if (le16_to_cpu(dev->descriptor.idVendor)==0x05E3 && le16_to_cpu(dev->descriptor.idProduct)==0x0761) {
+		pr_info("[USB_stor] Station SD card");
+	} else {
+		disk_count = disk_count + 1;
+		pr_info("[USB_stor] External USB Disk, disk_count=%d", disk_count);
+	}
 	/*
 	 * Ask the SCSI layer to allocate a host structure, with extra
 	 * space at the end for our private us_data structure.
@@ -1105,6 +1116,14 @@ EXPORT_SYMBOL_GPL(usb_stor_probe2);
 void usb_stor_disconnect(struct usb_interface *intf)
 {
 	struct us_data *us = usb_get_intfdata(intf);
+	struct usb_device *dev = interface_to_usbdev(intf);
+
+	if (le16_to_cpu(dev->descriptor.idVendor)==0x05E3 && le16_to_cpu(dev->descriptor.idProduct)==0x0761) {
+		pr_info("[USB_stor] remove Station SD card");
+	} else {
+		disk_count = disk_count - 1;
+		pr_info("[USB_stor] remove External USB Disk, disk_count=%d", disk_count);
+	}
 
 	quiesce_and_remove_host(us);
 	release_everything(us);

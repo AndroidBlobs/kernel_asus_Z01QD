@@ -49,6 +49,7 @@
 #include "debug.h"
 
 #define DWC3_DEFAULT_AUTOSUSPEND_DELAY	5000 /* ms */
+int usb_speed_store_high = 0;
 
 static int count;
 static struct dwc3 *dwc3_instance[DWC_CTRL_COUNT];
@@ -192,6 +193,15 @@ static int dwc3_init_usb_phys(struct dwc3 *dwc)
 		pr_err("%s: usb_phy_init(dwc->usb2_phy) returned %d\n",
 				__func__, ret);
 		return ret;
+	}
+
+	if (!strcmp("a600000.dwc3", dev_name(dwc->dev))) {
+		if(dwc->maximum_speed == USB_SPEED_HIGH){
+				usb_speed_store_high = 1;
+		}else{
+				usb_speed_store_high = 0;
+		}
+		pr_info("[USB] %s USB1 usb_speed_store_high is %d\n", __func__, usb_speed_store_high);
 	}
 
 	if (dwc->maximum_speed == USB_SPEED_HIGH)

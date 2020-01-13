@@ -156,6 +156,170 @@ static int __init set_reset_devices(char *str)
 
 __setup("reset_devices", set_reset_devices);
 
+/* ASUS_BSP Display +++*/
+char g_panel_unique_id[9];
+static int set_panel_unique_id(char *str)
+{
+	scnprintf(g_panel_unique_id, sizeof(g_panel_unique_id), str);
+    printk("[Display] panel unique id = %s\n",  g_panel_unique_id);
+    return 0;
+}
+__setup("LCD=", set_panel_unique_id);
+EXPORT_SYMBOL(g_panel_unique_id);
+/* ASUS_BSP Display ---*/
+
+/* ASUS_BSP charger +++ */
+bool g_Charger_mode = false;
+static int set_charger_mode(char *str)
+{
+    if ( strcmp("charger", str) == 0 )
+        g_Charger_mode = true;
+    else
+        g_Charger_mode = false;
+
+    printk("g_Charger_mode = %d\n", g_Charger_mode);
+    return 0;
+}
+__setup("androidboot.mode=", set_charger_mode);
+EXPORT_SYMBOL(g_Charger_mode);
+/* ASUS_BSP charger --- */
+int g_user_dbg_mode = 1;
+EXPORT_SYMBOL(g_user_dbg_mode);
+
+static int set_user_dbg_mode(char *str)
+{
+	if (strcmp("y", str) == 0)
+		g_user_dbg_mode = 1;
+	else
+		g_user_dbg_mode = 0;
+	g_user_dbg_mode = 1;
+	printk("Kernel dbg mode = %d\n", g_user_dbg_mode);
+	return 0;
+}
+__setup("dbg=", set_user_dbg_mode);
+/* ASUS_BSP Add for Station SDP +++ */
+int g_ST_SDP_mode = 0;
+EXPORT_SYMBOL(g_ST_SDP_mode);
+
+static int set_ST_SDP_mode(char *str)
+{
+    if ( strcmp("1", str) == 0 )
+    {
+        g_ST_SDP_mode = 1;
+    }
+    else
+    {
+        g_ST_SDP_mode = 0;
+    }
+    printk("androidboot.ST.SDP= %d\n",  g_ST_SDP_mode);
+    return 0;
+}
+__setup("androidboot.ST.SDP=", set_ST_SDP_mode);
+/* ASUS_BSP Add for Station SDP --- */
+
+int g_ftm_mode = 0;
+EXPORT_SYMBOL(g_ftm_mode);
+
+static int set_ftm_mode(char *str)
+{
+    if ( strcmp("1", str) == 0 )
+    {
+        g_ftm_mode = 1;
+    }
+    else
+    {
+        g_ftm_mode = 0;
+    }
+    printk("androidboot.pre-ftm= %d\n",  g_ftm_mode);
+    return 0;
+}
+__setup("androidboot.pre-ftm=", set_ftm_mode);
+
+
+//+++ ASUS_BSP : miniporting
+enum DEVICE_HWID g_ASUS_hwID=ZS600KL_UNKNOWN;
+EXPORT_SYMBOL(g_ASUS_hwID);
+
+ static int set_hardware_id(char *str)
+ {
+	// ZS600KL
+	if ( strcmp("0", str) == 0 )
+	{
+		g_ASUS_hwID = ZS600KL_SR1EVB;
+		printk("Kernel HW ID = ZS600KL_SR1EVB\n");
+	}	
+	else if ( strcmp("1", str) == 0 )
+	{
+		g_ASUS_hwID = ZS600KL_PROTO;
+		printk("Kernel HW ID = ZS600KL_PROTO\n");
+	}
+	else if ( strcmp("2", str) == 0 )
+	{
+		g_ASUS_hwID = ZS600KL_SR1;
+		printk("Kernel HW ID = ZS600KL_SR1\n");
+	}
+	else if ( strcmp("3", str) == 0 )
+	{
+		g_ASUS_hwID = ZS600KL_SR2;
+		printk("Kernel HW ID = ZS600KL_SR2\n");
+	}
+	else if ( strcmp("4", str) == 0 )
+	{
+		g_ASUS_hwID = ZS600KL_ER1;
+		printk("Kernel HW ID = ZS600KL_ER1\n");
+	}		
+        else if ( strcmp("5", str) == 0 )
+        {
+                g_ASUS_hwID = ZS600KL_ERAC;
+                printk("Kernel HW ID = ZS600KL_ERAC\n");
+        }
+        else if ( strcmp("6", str) == 0 )
+        {
+                g_ASUS_hwID = ZS600KL_PR1;
+                printk("Kernel HW ID = ZS600KL_PR1\n");
+        }
+       else if ( strcmp("7", str) == 0 )
+        {
+                g_ASUS_hwID = ZS600KL_MP;
+                printk("Kernel HW ID = ZS600KL_MP\n");
+        }
+
+	printk("g_Asus_hwID = %d\n", g_ASUS_hwID);
+	return 0;
+}
+ __setup("androidboot.id.stage=", set_hardware_id);
+
+
+enum DEVICE_SKUID g_ASUS_skuID=ZS600KL_UNKNOWN_PRJ;
+EXPORT_SYMBOL(g_ASUS_skuID);
+
+ static int set_sku_id(char *str)
+ {
+	// ZS600KL
+	if ( strcmp("0", str) == 0 )
+	{
+		g_ASUS_skuID = ZS600KL_SKU_ID_0;
+		printk("Kernel SKU ID = 0(SKU1)\n");
+	}	
+	else if ( strcmp("1", str) == 0 )
+	{
+		g_ASUS_skuID = ZS600KL_SKU_ID_1;
+		printk("Kernel SKU ID = 1(SKU2)\n");
+	}
+	else if ( strcmp("2", str) == 0 )
+	{
+		g_ASUS_skuID = ZS600KL_SKU_ID_2;
+		printk("Kernel SKU ID = 2(SKU3)\n");
+	}	
+
+
+	printk("g_Asus_skuID = %d\n", g_ASUS_skuID);
+	return 0;
+}
+ __setup("androidboot.id.sku=", set_sku_id);
+
+//--- ASUS_BSP : miniporting
+
 static const char *argv_init[MAX_INIT_ARGS+2] = { "init", NULL, };
 const char *envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
 static const char *panic_later, *panic_param;
@@ -752,14 +916,22 @@ static int __init_or_module do_one_initcall_debug(initcall_t fn)
 	unsigned long long duration;
 	int ret;
 
-	printk(KERN_DEBUG "calling  %pF @ %i\n", fn, task_pid_nr(current));
+	if (initcall_debug)
+		printk(KERN_DEBUG "calling  %pF @ %i\n", fn, task_pid_nr(current));
 	calltime = ktime_get();
 	ret = fn();
 	rettime = ktime_get();
 	delta = ktime_sub(rettime, calltime);
 	duration = (unsigned long long) ktime_to_ns(delta) >> 10;
-	printk(KERN_DEBUG "initcall %pF returned %d after %lld usecs\n",
-		 fn, ret, duration);
+	if (initcall_debug)
+		printk(KERN_DEBUG "initcall %pF returned %d after %lld usecs\n",
+			 fn, ret, duration);
+
+	if (initcall_debug == 0) {
+		if (duration > 100000)
+			printk(KERN_WARNING "[debuginit] initcall %pF returned %d after %lld usecs\n", fn,
+				ret, duration);
+	}
 
 	return ret;
 }
@@ -773,10 +945,7 @@ int __init_or_module do_one_initcall(initcall_t fn)
 	if (initcall_blacklisted(fn))
 		return -EPERM;
 
-	if (initcall_debug)
-		ret = do_one_initcall_debug(fn);
-	else
-		ret = fn();
+	ret = do_one_initcall_debug(fn);
 
 	msgbuf[0] = 0;
 

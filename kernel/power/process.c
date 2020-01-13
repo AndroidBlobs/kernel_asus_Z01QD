@@ -142,7 +142,7 @@ int freeze_processes(void)
 		atomic_inc(&system_freezing_cnt);
 
 	pm_wakeup_clear();
-	pr_info("Freezing user space processes ... ");
+	pr_info("Freezing user space processes ...\n");
 	pm_freezing = true;
 	error = try_to_freeze_tasks(true);
 	if (!error) {

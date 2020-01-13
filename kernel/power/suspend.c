@@ -34,6 +34,13 @@
 
 #include "power.h"
 
+/*[+++]Debug for active wakelock before entering suspend*/
+#include <linux/wakelock.h>
+int pmsp_flag = 0;
+bool g_resume_status;
+int pm_stay_unattended_period = 0;
+/*[---]Debug for active wakelock before entering suspend*/
+
 const char *pm_labels[] = { "mem", "standby", "freeze", NULL };
 const char *pm_states[PM_SUSPEND_MAX];
 
@@ -258,7 +265,7 @@ static int suspend_test(int level)
 {
 #ifdef CONFIG_PM_DEBUG
 	if (pm_test_level == level) {
-		pr_info("suspend debug: Waiting for %d second(s).\n",
+		printk("[PM]suspend debug: Waiting for %d second(s).\n",
 				pm_test_delay);
 		mdelay(pm_test_delay * 1000);
 		return 1;
@@ -266,6 +273,14 @@ static int suspend_test(int level)
 #endif /* !CONFIG_PM_DEBUG */
 	return 0;
 }
+
+/* ASUS BSP Freeddy_Ke ++
+* Use g_keycheck_abort in gpio_keys_suspend_noirq, if true, abort this suspend process.
+* Let g_keycheck_abort = 0 when next suspend in suspend_prepare()
+
+* This flag will init in /kernel/msm-4.9/drivers/input/misc/qpnp-power-on.c
+*/
+extern int g_keycheck_abort;
 
 /**
  * suspend_prepare - Prepare for entering system sleep state.
@@ -289,6 +304,7 @@ static int suspend_prepare(suspend_state_t state)
 		goto Finish;
 	}
 
+	g_keycheck_abort = 0;	//Clean this flag during suspend
 	trace_suspend_resume(TPS("freeze_processes"), 0, true);
 	error = suspend_freeze_processes();
 	trace_suspend_resume(TPS("freeze_processes"), 0, false);
@@ -335,27 +351,31 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 	if (error) {
 		last_dev = suspend_stats.last_failed_dev + REC_FAILED_NUM - 1;
 		last_dev %= REC_FAILED_NUM;
-		pr_err("PM: late suspend of devices failed\n");
+		printk("[PM] late suspend of devices failed\n");
 		log_suspend_abort_reason("%s device failed to power down",
 			suspend_stats.failed_devs[last_dev]);
 		goto Platform_finish;
 	}
 	error = platform_suspend_prepare_late(state);
-	if (error)
+	if (error) {
+		printk("[PM] platform_suspend_prepare_late failed, error: %d\n", error);
 		goto Devices_early_resume;
+	}
 
 	error = dpm_suspend_noirq(PMSG_SUSPEND);
 	if (error) {
 		last_dev = suspend_stats.last_failed_dev + REC_FAILED_NUM - 1;
 		last_dev %= REC_FAILED_NUM;
-		pr_err("PM: noirq suspend of devices failed\n");
+		printk("[PM] noirq suspend of devices failed\n");
 		log_suspend_abort_reason("noirq suspend of %s device failed",
 			suspend_stats.failed_devs[last_dev]);
 		goto Platform_early_resume;
 	}
 	error = platform_suspend_prepare_noirq(state);
-	if (error)
+	if (error) {
+		printk("[PM] platform_suspend_prepare_noirq failed, error: %d\n", error);
 		goto Platform_wake;
+	}
 
 	if (suspend_test(TEST_PLATFORM))
 		goto Platform_wake;
@@ -388,7 +408,11 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 		if (!(suspend_test(TEST_CORE) || *wakeup)) {
 			trace_suspend_resume(TPS("machine_suspend"),
 				state, true);
+			printk("[PM] +lpm_suspend_enter\n");
 			error = suspend_ops->enter(state);
+			printk("[PM] -lpm_suspend_enter\n");
+			if (error)
+				printk("[PM] lpm_suspend_enter Error, error =%d\n", error);
 			trace_suspend_resume(TPS("machine_suspend"),
 				state, false);
 			events_check_enabled = false;
@@ -422,6 +446,23 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 	return error;
 }
 
+/*[+++][PM]Debug for active wakelock before entering suspend*/
+extern void print_active_locks(void); /*kernel/drivers/base/power/wakeup.c*/
+void unattended_timer_expired(unsigned long data);
+DEFINE_TIMER(unattended_timer, unattended_timer_expired, 0, 0);
+
+void unattended_timer_expired(unsigned long data)
+{
+	printk("[PM] unattended_timer_expired()\n");
+
+	pmsp_flag=1;
+/*for dump cpuinfo purpose, it needs 30mins to timeout*/
+	pm_stay_unattended_period += PM_UNATTENDED_TIMEOUT;
+	print_active_locks();
+	mod_timer(&unattended_timer, jiffies + msecs_to_jiffies(PM_UNATTENDED_TIMEOUT));
+}
+/*[---][PM]Debug for active wakelock before entering suspend*/
+
 /**
  * suspend_devices_and_enter - Suspend devices and enter system sleep state.
  * @state: System sleep state to enter.
@@ -438,11 +479,18 @@ int suspend_devices_and_enter(suspend_state_t state)
 	if (error)
 		goto Close;
 
+/*[+++]Debug for active wakelock before suspend_console()*/
+	printk("[PM]unattended_timer: del_timer (prepare suspend_console())\n");
+	del_timer ( &unattended_timer );
+
+	pm_stay_unattended_period = 0; //suspend_devices_and_enter; goto suspend_console()
+/*[---]Debug for active wakelock before suspend_console()*/
+
 	suspend_console();
 	suspend_test_start();
 	error = dpm_suspend_start(PMSG_SUSPEND);
 	if (error) {
-		pr_err("PM: Some devices failed to suspend, or early wake event detected\n");
+		printk("[PM]: Some devices failed to suspend, or early wake event detected\n");
 		log_suspend_abort_reason("Some devices failed to suspend, or early wake event detected");
 		goto Recover_platform;
 	}
@@ -461,6 +509,12 @@ int suspend_devices_and_enter(suspend_state_t state)
 	trace_suspend_resume(TPS("resume_console"), state, true);
 	resume_console();
 	trace_suspend_resume(TPS("resume_console"), state, false);
+
+/*[+++]Debug for active wakelock after resume_console()*/
+	printk("[PM]unattended_timer: mod_timer(due to resume_console())\n");
+	mod_timer(&unattended_timer, jiffies + msecs_to_jiffies(PM_UNATTENDED_TIMEOUT));
+	g_resume_status = true;
+/*[---]Debug for active wakelock after resume_console()*/
 
  Close:
 	platform_resume_end(state);
@@ -515,13 +569,13 @@ static int enter_state(suspend_state_t state)
 
 #ifndef CONFIG_SUSPEND_SKIP_SYNC
 	trace_suspend_resume(TPS("sync_filesystems"), 0, true);
-	pr_info("PM: Syncing filesystems ... ");
+	printk("[PM] enter_state(), Syncing filesystems ... ");
 	sys_sync();
-	pr_cont("done.\n");
+	printk("sys_sync(), done.\n");
 	trace_suspend_resume(TPS("sync_filesystems"), 0, false);
 #endif
 
-	pr_debug("PM: Preparing system for sleep (%s)\n", pm_states[state]);
+	printk("[PM] suspend_prepare(), Preparing system for sleep (%s)\n", pm_states[state]);
 	pm_suspend_clear_flags();
 	error = suspend_prepare(state);
 	if (error)
@@ -531,13 +585,13 @@ static int enter_state(suspend_state_t state)
 		goto Finish;
 
 	trace_suspend_resume(TPS("suspend_enter"), state, false);
-	pr_debug("PM: Suspending system (%s)\n", pm_states[state]);
+	printk("[PM] suspend_prepare()OK, Suspending system (%s)\n", pm_states[state]);
 	pm_restrict_gfp_mask();
 	error = suspend_devices_and_enter(state);
 	pm_restore_gfp_mask();
 
  Finish:
-	pr_debug("PM: Finishing wakeup.\n");
+	printk("[PM] Finishing wakeup.\n");
 	suspend_finish();
  Unlock:
 	mutex_unlock(&pm_mutex);
@@ -551,7 +605,7 @@ static void pm_suspend_marker(char *annotation)
 
 	getnstimeofday(&ts);
 	rtc_time_to_tm(ts.tv_sec, &tm);
-	pr_info("PM: suspend %s %d-%02d-%02d %02d:%02d:%02d.%09lu UTC\n",
+	printk("[PM] pm_suspend() %s %d-%02d-%02d %02d:%02d:%02d.%09lu UTC\n",
 		annotation, tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
 		tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec);
 }

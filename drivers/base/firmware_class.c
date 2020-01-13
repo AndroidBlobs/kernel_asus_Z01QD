@@ -349,6 +349,65 @@ fw_get_filesystem_firmware(struct device *device, struct firmware_buf *buf)
 			break;
 		}
 
+                /* ASUS BSP : For Change Sensor Core FW loading path */
+		if (!strncmp(buf->fw_id, "slpi", 4)&& i == 0) {
+			snprintf(path, PATH_MAX, "%s/%s", "/vendor/firmware", buf->fw_id);
+			dev_err(device, "[SLPI] Try to load firmware : %s \n", path);
+		}
+		/* ASUS BSP ---*/
+
+		/* ASUS BSP audio: change fw path */
+		if (!strncmp(buf->fw_id, "adsp", 4)) {
+			snprintf(path, PATH_MAX, "%s/%s", "/vendor/firmware", buf->fw_id);
+			dev_err(device, "[Audio] Try to load firmware: %s\n", path);
+		}
+
+		if (!strncmp(buf->fw_id, "cpe_", 4)) {
+			snprintf(path, PATH_MAX, "%s/%s", "/vendor/firmware", buf->fw_id);
+			dev_err(device, "[Audio] Try to load firmware: %s\n", path);
+		}
+
+#if 0 /* no asusfw */
+		if (!strcmp(buf->fw_id, "tfa98xx.cnt")) {
+			snprintf(path, PATH_MAX, "%s/%s", "/vendor/asusfw/audio", buf->fw_id);
+			dev_err(device, "[Audio] Try to load firmware: %s\n", path);
+		}
+
+		if (!strcmp(buf->fw_id, "tfa9894.cnt")) {
+			snprintf(path, PATH_MAX, "%s/%s", "/vendor/asusfw/audio", buf->fw_id);
+			dev_err(device, "[Audio] Try to load firmware: %s\n", path);
+		}
+#else
+		if (!strcmp(buf->fw_id, "tfa98xx.cnt")) {
+			snprintf(path, PATH_MAX, "%s/%s", "/vendor/firmware", buf->fw_id);
+			dev_err(device, "[Audio] Try to load firmware: %s\n", path);
+		}
+
+		if (!strcmp(buf->fw_id, "tfa9894.cnt")) {
+			snprintf(path, PATH_MAX, "%s/%s", "/vendor/firmware", buf->fw_id);
+			dev_err(device, "[Audio] Try to load firmware: %s\n", path);
+		}
+#endif
+		/* ASUS BSP audio --- */
+
+		/* ASUS BSP Wigig: change fw path */
+		if (!strncmp(buf->fw_id, "wil6210.", 8)) {
+			snprintf(path, PATH_MAX, "%s/%s", "/vendor/firmware", buf->fw_id);
+			dev_err(device, "[Wigig] Try to load firmware: %s\n", path);
+		}
+		/* ASUS BSP ---*/
+
+		/* CONFIG_PXLW_IRIS3 */
+		if (!strcmp(buf->fw_id, "iris3.fw") && i == 1) {
+			snprintf(path, PATH_MAX, "%s/%s", "/vendor/firmware", buf->fw_id);
+			dev_err(device, "[Iris] Try to load: %s\n", path);
+		}
+		if (!strcmp(buf->fw_id, "iris3_gs.fw") && i == 1) {
+			snprintf(path, PATH_MAX, "%s/%s", "/vendor/firmware", buf->fw_id);
+			dev_err(device, "[Iris] Try to load: %s\n", path);
+		}
+		/* end of iris3 */
+
 		buf->size = 0;
 		rc = kernel_read_file_from_path(path, &buf->data, &size, msize,
 						id);

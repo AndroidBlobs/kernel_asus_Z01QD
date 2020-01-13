@@ -33,8 +33,25 @@
 #include <linux/of_irq.h>
 #include <linux/spinlock.h>
 
+//[+++]Debug for active wakelock before entering suspend
+#include <linux/extcon.h>
+//[---]Debug for active wakelock before entering suspend
+
+//ASUS BSP Freeddy_Ke+++ Use wakelock to extend input sysnc time.
+/*#include <linux/wakelock.h>//For pwr_key_wake_lock();*/
+
+static bool g_bResume = 1;	/*/kernel/msm-4.9/kernel/power/suspend.c*/
+/*static struct wake_lock vol_key_wake_lock;*/
+//ASUS BSP Freeddy_Ke--- Use wakelock to extend input sysnc time.
+
+/* ASUS BSP Freeddy_Ke ++
+* Use g_keycheck_abort in gpio_keys_suspend_noirq, if true, abort this suspend process.
+* Let g_keycheck_abort = 0 when next suspend in suspend_prepare()
+*/
+extern int g_keycheck_abort; //set tag for abort method /kernel/msm-4.9/drivers/input/misc/qpnp-power-on.c
+
 struct gpio_button_data {
-	const struct gpio_keys_button *button;
+	struct gpio_keys_button *button; //Remove const for DEVICE_ATTR(enabled_wakeup/disabled_wakeup)
 	struct input_dev *input;
 	struct gpio_desc *gpiod;
 
@@ -343,11 +360,65 @@ static DEVICE_ATTR(disabled_switches, S_IWUSR | S_IRUGO,
 		   gpio_keys_show_disabled_switches,
 		   gpio_keys_store_disabled_switches);
 
+//ASUS BSP : Freddy_Ke +++ "For "
+/*
+* echo keycode(114/115) > /sys/devices/platform/soc/soc:gpio_keys_asus/enabled_wakeup
+* echo keycode > /sys/devices/platform/soc/soc:gpio_keys_asus/disabled_wakeup
+*/
+static ssize_t gpio_keys_wakeup_enable(struct device *dev,
+				struct device_attribute *attr, const char *buf,
+						size_t size, int enable_wakeup)
+{
+		int i, ret = -EINVAL;
+		long code;
+		struct gpio_keys_drvdata *ddata = dev_get_drvdata(dev);
+
+		ret = kstrtol(buf, 10, &code);
+		if (ret != 0) {
+
+			dev_err(dev, "Invalid input.\n");
+			return ret;
+		}
+		for (i = 0; i < ddata->pdata->nbuttons; i++) {
+			struct gpio_button_data *bdata = &ddata->data[i];
+			if ((int)code == bdata->button->code) {
+				printk("[Gpio_keys] volkey wakeup keycode:%d\n", (int)code);
+				bdata->button->wakeup = enable_wakeup;
+				device_init_wakeup(dev, bdata->button->wakeup);
+				break;
+				}
+		}
+		return size;
+}
+
+static ssize_t gpio_keys_store_enabled_wakeup(struct device *dev,
+				struct device_attribute *attr, const char *buf, size_t size)
+{
+				printk("[Gpio_keys] set volkey wakeup:True\n");
+		return gpio_keys_wakeup_enable(dev, attr, buf, size, 1);
+}
+
+static ssize_t gpio_keys_store_disabled_wakeup(struct device *dev,
+				struct device_attribute *attr, const char *buf, size_t size)
+{
+				printk("[Gpio_keys] set volkey wakeup:False\n");
+		return gpio_keys_wakeup_enable(dev, attr, buf, size, 0);
+}
+static DEVICE_ATTR(enabled_wakeup, S_IWUSR | S_IRUGO,
+						NULL,
+						gpio_keys_store_enabled_wakeup);
+static DEVICE_ATTR(disabled_wakeup, S_IWUSR | S_IRUGO,
+						NULL,
+						gpio_keys_store_disabled_wakeup);
+//ASUS BSP : Freddy_Ke ---
+
 static struct attribute *gpio_keys_attrs[] = {
 	&dev_attr_keys.attr,
 	&dev_attr_switches.attr,
 	&dev_attr_disabled_keys.attr,
 	&dev_attr_disabled_switches.attr,
+	&dev_attr_enabled_wakeup.attr,		//ASUS BSP : Freddy_Ke +++
+	&dev_attr_disabled_wakeup.attr,		//ASUS BSP : Freddy_Ke +++
 	NULL,
 };
 
@@ -355,6 +426,7 @@ static struct attribute_group gpio_keys_attr_group = {
 	.attrs = gpio_keys_attrs,
 };
 
+unsigned int b_press = 0; //ASUS_BSP : Wei_Lai
 static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 {
 	const struct gpio_keys_button *button = bdata->button;
@@ -369,11 +441,35 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 		return;
 	}
 
+	printk("[Keys][gpio_keys.c] keycode=%d, state=%s\n", button->code, state?"press":"release");
+
 	if (type == EV_ABS) {
 		if (state)
 			input_event(input, type, button->code, button->value);
 	} else {
 		input_event(input, type, button->code, state);
+		if(state) {
+
+	//ASUS BSP Freddy_Ke+++ Use wakelock to extend input sysnc time.
+		       if ((button->code == KEY_VOLUMEUP) || (button->code == KEY_VOLUMEDOWN)) {
+				//printk("[Gpio_keys]vol_key:%x,pm sts:%x,\r\n", state, g_bResume);
+				//wake_lock_timeout(&vol_key_wake_lock, msecs_to_jiffies(3000));
+				//printk("[Gpio_keys]Wakelock 3 sec for vol_key \n");
+	//ASUS BSP Freddy_Ke--- Use wakelock to extend input sysnc time.
+			}
+
+		       if(button->code == 114)
+		               b_press |= 0x01;
+
+		       if(button->code == 115)
+		               b_press |= 0x02;
+		}else {
+			if(button->code == 114)
+			       b_press &= ~(0x01);
+
+			if(button->code == 115)
+			       b_press &= ~(0x02);
+		}
 	}
 	input_sync(input);
 }
@@ -395,6 +491,7 @@ static irqreturn_t gpio_keys_gpio_isr(int irq, void *dev_id)
 
 	BUG_ON(irq != bdata->irq);
 
+	g_keycheck_abort = 1;// Check this flag in gpio_keys_suspend_noirq, if true, abort this suspend process.
 	if (bdata->button->wakeup)
 		pm_stay_awake(bdata->input->dev.parent);
 
@@ -468,7 +565,7 @@ static void gpio_keys_quiesce_key(void *data)
 static int gpio_keys_setup_key(struct platform_device *pdev,
 				struct input_dev *input,
 				struct gpio_button_data *bdata,
-				const struct gpio_keys_button *button)
+				struct gpio_keys_button *button)	//Remove const for DEVICE_ATTR(enabled_wakeup/disabled_wakeup)
 {
 	const char *desc = button->desc ? button->desc : "gpio_keys";
 	struct device *dev = &pdev->dev;
@@ -583,6 +680,8 @@ static int gpio_keys_setup_key(struct platform_device *pdev,
 	return 0;
 }
 
+/*ASUS_BSP Freddy++
+* "Dont need report key during driver probe fun."
 static void gpio_keys_report_state(struct gpio_keys_drvdata *ddata)
 {
 	struct input_dev *input = ddata->input;
@@ -595,6 +694,7 @@ static void gpio_keys_report_state(struct gpio_keys_drvdata *ddata)
 	}
 	input_sync(input);
 }
+*/
 
 static int gpio_keys_open(struct input_dev *input)
 {
@@ -609,7 +709,7 @@ static int gpio_keys_open(struct input_dev *input)
 	}
 
 	/* Report current state of buttons that are connected to GPIOs */
-	gpio_keys_report_state(ddata);
+	//gpio_keys_report_state(ddata); Dont need report key
 
 	return 0;
 }
@@ -687,18 +787,19 @@ gpio_keys_get_devtree_pdata(struct device *dev)
 		if (!gpio_is_valid(button->gpio) && !button->irq) {
 			dev_err(dev, "Found button without gpios or irqs\n");
 			return ERR_PTR(-EINVAL);
-		}
+		}	//gpio 6
 
 		if (of_property_read_u32(pp, "linux,code", &button->code)) {
 			dev_err(dev, "Button without keycode: 0x%x\n",
 				button->gpio);
 			return ERR_PTR(-EINVAL);
-		}
+		}	// linux,code = 115
 
 		button->desc = of_get_property(pp, "label", NULL);
 
 		if (of_property_read_u32(pp, "linux,input-type", &button->type))
 			button->type = EV_KEY;
+		// if = 1 => EV_KEY
 
 		button->wakeup = of_property_read_bool(pp, "wakeup-source") ||
 				 /* legacy name */
@@ -733,21 +834,39 @@ gpio_keys_get_devtree_pdata(struct device *dev)
 
 #endif
 
+//[+++]Debug for active wakelock before entering suspend
+static const unsigned int asus_extcon_autosleep[] = {
+	EXTCON_NONE,
+};
+
+static const unsigned int asus_extcon_autosleep2[] = {
+	EXTCON_NONE,
+};
+
+
+struct gpio_keys_platform_data *gpdata;
+//[---]Debug for active wakelock before entering suspend
+
+
 static int gpio_keys_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	const struct gpio_keys_platform_data *pdata = dev_get_platdata(dev);
+	struct gpio_keys_platform_data *pdata = dev_get_platdata(dev);
 	struct gpio_keys_drvdata *ddata;
 	struct input_dev *input;
 	size_t size;
 	int i, error;
 	int wakeup = 0;
 
+	printk("[Keys][gpio_keys.c] gpio_keys_probe() +++\n");
+
 	if (!pdata) {
 		pdata = gpio_keys_get_devtree_pdata(dev);
 		if (IS_ERR(pdata))
 			return PTR_ERR(pdata);
 	}
+
+	gpdata = pdata;	//[PM]Debug for active wakelock before entering suspend
 
 	size = sizeof(struct gpio_keys_drvdata) +
 			pdata->nbuttons * sizeof(struct gpio_button_data);
@@ -786,7 +905,7 @@ static int gpio_keys_probe(struct platform_device *pdev)
 		__set_bit(EV_REP, input->evbit);
 
 	for (i = 0; i < pdata->nbuttons; i++) {
-		const struct gpio_keys_button *button = &pdata->buttons[i];
+		struct gpio_keys_button *button = &pdata->buttons[i]; //Remove const for DEVICE_ATTR(enabled_wakeup/disabled_wakeup)
 		struct gpio_button_data *bdata = &ddata->data[i];
 
 		error = gpio_keys_setup_key(pdev, input, bdata, button);
@@ -796,6 +915,49 @@ static int gpio_keys_probe(struct platform_device *pdev)
 		if (button->wakeup)
 			wakeup = 1;
 	}
+
+//[+++]Debug for active wakelock before entering suspend
+	pdata->pmsp_dev_extcon = extcon_dev_allocate(asus_extcon_autosleep);
+
+	if (IS_ERR(pdata->pmsp_dev_extcon)) {
+		error = PTR_ERR(pdata->pmsp_dev_extcon );
+		dev_err(dev, "[Gpio_keys] failed to allocate ASUS PMSP extcon device error=%d\n",
+				error);
+		goto err_remove_group;
+	}
+
+	pdata->pmsp_dev_extcon->fnode_name = "PowerManagerService";
+
+	error = extcon_dev_register(pdata->pmsp_dev_extcon);
+
+	if (error < 0) {
+		dev_err(dev, "[Gpio_keys] failed to register ASUS PMSP extcon device error=%d\n",
+				error);
+		goto err_remove_group;
+	}
+
+
+
+	pdata->pm_dumpthread_dev_extcon = extcon_dev_allocate(asus_extcon_autosleep2);
+
+	if (IS_ERR(pdata->pm_dumpthread_dev_extcon)) {
+		error = PTR_ERR(pdata->pm_dumpthread_dev_extcon );
+		dev_err(dev, "[Gpio_keys] failed to allocate ASUS PM_dumpthread extcon device error=%d\n",
+				error);
+		goto err_remove_group;
+	}
+
+	pdata->pm_dumpthread_dev_extcon->fnode_name = "UnattendedTimerDumpBusyThread";
+
+	error = extcon_dev_register(pdata->pm_dumpthread_dev_extcon);
+
+	if (error < 0) {
+		dev_err(dev, "[Gpio_keys] failed to register ASUS PM_dumpthread extcon device error=%d\n",
+				error);
+		goto err_remove_group;
+	}
+
+//[---]Debug for active wakelock before entering suspend
 
 	error = sysfs_create_group(&pdev->dev.kobj, &gpio_keys_attr_group);
 	if (error) {
@@ -812,6 +974,10 @@ static int gpio_keys_probe(struct platform_device *pdev)
 	}
 
 	device_init_wakeup(&pdev->dev, wakeup);
+
+/*	wake_lock_init(&vol_key_wake_lock, WAKE_LOCK_SUSPEND, "vol_key_lock");*/
+
+	printk("[Keys][gpio_keys.c] gpio_keys_probe() ---\n");
 
 	return 0;
 
@@ -875,20 +1041,99 @@ static int gpio_keys_resume(struct device *dev)
 	if (error)
 		return error;
 
-	gpio_keys_report_state(ddata);
+	//gpio_keys_report_state(ddata);	//Dont need report key during resume
 	return 0;
 }
+
+
+//[+++]Debug for active wakelock before entering suspend
+void pmsp_print_gpio_keys(void){
+
+	static int pmsp_counter = 0;
+
+	if(pmsp_counter % 2){
+		printk("%s:enter pmsprinter ready to send uevent 0 \n",__func__);
+		asus_extcon_set_cable_state_(gpdata->pmsp_dev_extcon, 0);
+		pmsp_counter++;}
+	else{
+		printk("%s:enter pmsprinter ready to send uevent 1 \n",__func__);
+		asus_extcon_set_cable_state_(gpdata->pmsp_dev_extcon, 1);
+		pmsp_counter++;}
+
+	return;
+}
+EXPORT_SYMBOL(pmsp_print_gpio_keys);
+
+
+void print_pm_cpuinfo_gpio_keys(void){
+	static bool toggle = false;
+
+	toggle = !toggle;
+	printk("%s: Dump PowerManagerService wakelocks, toggle %d\n",__func__, toggle ? 1 : 0);
+
+    return;
+}
+EXPORT_SYMBOL(print_pm_cpuinfo_gpio_keys);
+//[---]Debug for active wakelock before entering suspend
+
+/*ASUS_BSP Freddy ++ */
+
+static int gpio_keys_suspend_noirq(struct device *dev)
+{
+
+       g_bResume = 0;
+       printk("[Gpio_keys]gpio_keys_suspend_noirq\n");
+
+       return 0;
+}
+
+static int gpio_keys_resume_noirq(struct device *dev)
+{
+//	struct gpio_keys_drvdata *ddata = dev_get_drvdata(dev);
+
+	//ddata->force_trigger = 1;
+	g_bResume = 1;
+	printk("[Gpio_keys]gpio_keys_resume_noirq\n");
+
+	return 0;
+}
+
+#else
+
+static int gpio_keys_suspend(struct device *dev)
+{
+	return 0;
+}
+
+static int gpio_keys_resume(struct device *dev)
+{
+	return 0;
+}
+
 #endif
 
-static SIMPLE_DEV_PM_OPS(gpio_keys_pm_ops, gpio_keys_suspend, gpio_keys_resume);
+//static SIMPLE_DEV_PM_OPS(gpio_keys_pm_ops, gpio_keys_suspend, gpio_keys_resume);
+
+static const struct dev_pm_ops gpio_keys_pm_ops = {
+	.suspend	= gpio_keys_suspend,
+	.resume		= gpio_keys_resume,
+	.suspend_noirq  = gpio_keys_suspend_noirq,
+	.resume_noirq   = gpio_keys_resume_noirq,
+};
+
+/*ASUS_BSP Freddy --*/
 
 static struct platform_driver gpio_keys_device_driver = {
 	.probe		= gpio_keys_probe,
 	.remove		= gpio_keys_remove,
 	.driver		= {
-		.name	= "gpio-keys",
-		.pm	= &gpio_keys_pm_ops,
-		.of_match_table = of_match_ptr(gpio_keys_of_match),
+	.name	= "gpio-keys",
+
+#ifdef CONFIG_PM_SLEEP
+	.pm	= &gpio_keys_pm_ops,
+#endif
+
+	.of_match_table = of_match_ptr(gpio_keys_of_match),
 	}
 };
 

@@ -310,6 +310,10 @@ static int input_get_disposition(struct input_dev *dev,
 		break;
 
 	case EV_ABS:
+	        if (code == ABS_MT_POSITION_X_F)
+		    code = ABS_MT_POSITION_X;
+		if (code == ABS_MT_POSITION_Y_F)
+		    code = ABS_MT_POSITION_Y;
 		if (is_event_supported(code, dev->absbit, ABS_MAX))
 			disposition = input_handle_abs_event(dev, code, &value);
 
@@ -370,6 +374,15 @@ static void input_handle_event(struct input_dev *dev,
 			       unsigned int type, unsigned int code, int value)
 {
 	int disposition = input_get_disposition(dev, type, code, &value);
+	if (type == EV_ABS){
+	  if (code == ABS_MT_POSITION_X_F || code == ABS_MT_POSITION_Y_F){
+	    disposition = INPUT_PASS_TO_HANDLERS;
+	    if (code == ABS_MT_POSITION_X_F)
+	        code = ABS_MT_POSITION_X;
+	    if (code == ABS_MT_POSITION_Y_F)
+	        code = ABS_MT_POSITION_Y;
+	  }
+	}
 
 	if (disposition != INPUT_IGNORE_EVENT && type != EV_SYN)
 		add_input_randomness(type, code, value);

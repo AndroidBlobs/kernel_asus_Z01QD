@@ -66,8 +66,6 @@
 #include <linux/ioctl.h>
 #include <linux/vmalloc.h>
 #include "focaltech_common.h"
-//#include <linux/switch/switch.h>
-#include <linux/extcon.h>	//ASUS BSP +++
 
 /*****************************************************************************
 * Private constant and macro definitions using #define
@@ -128,6 +126,7 @@ struct ts_event {
     int id;   /*touch ID */
     int area;
 };
+
 struct fts_ts_data {
     struct i2c_client *client;
     struct input_dev *input_dev;
@@ -142,24 +141,14 @@ struct fts_ts_data {
     spinlock_t irq_lock;
     struct mutex report_mutex;
 	struct mutex suspend_mutex;
-	struct mutex resume_mutex;
     int irq;
     bool suspended;
     bool fw_loading;
     bool irq_disabled;
-	bool glove_mode_eable;
-	bool pocket_mode_eable;
-	bool dclick_mode_eable;
-	bool swipeup_mode_eable;
-	bool gesture_mode_eable;
-	bool game_mode_eable;
-	bool checkG_game_mode_eable;
-	u8 gesture_mode_type;
 #if FTS_POWER_SOURCE_CUST_EN
     bool power_disabled;
 #endif
-    /* multi-touch */	
-	struct extcon_dev *touch_edev;
+    /* multi-touch */
     struct ts_event *events;
     u8 *point_buf;
     int pnt_buf_size;
@@ -169,31 +158,26 @@ struct fts_ts_data {
     int point_num;
     struct proc_dir_entry *proc;
     u8 proc_opmode;
-	struct work_struct resume_work;
+		struct work_struct resume_work;
 	struct workqueue_struct *suspend_resume_wq;
-    //jacob add for read gesture
-    struct work_struct gesturework;
-    struct workqueue_struct *read_gesture_wq;    
-    //jacob add for read gesture
+#if FTS_PINCTRL_EN
     struct pinctrl *pinctrl;
     struct pinctrl_state *pins_active;
     struct pinctrl_state *pins_suspend;
     struct pinctrl_state *pins_release;
+#endif
 #if defined(CONFIG_FB)
     struct notifier_block fb_notif;
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
     struct early_suspend early_suspend;
 #endif
 };
-static const unsigned int asus_touch[] = {
-	EXTCON_NONE,
-};
-
 
 /*****************************************************************************
 * Global variable or extern global variabls/functions
 *****************************************************************************/
 extern struct fts_ts_data *fts_data;
+
 /* i2c communication*/
 int fts_i2c_write_reg(struct i2c_client *client, u8 regaddr, u8 regvalue);
 int fts_i2c_read_reg(struct i2c_client *client, u8 regaddr, u8 *regvalue);
@@ -202,8 +186,6 @@ int fts_i2c_write(struct i2c_client *client, char *writebuf, int writelen);
 void fts_i2c_hid2std(struct i2c_client *client);
 int fts_i2c_init(void);
 int fts_i2c_exit(void);
-u8 get_focal_tp_fw(void);
-u8 get_focal_tp_id(void);
 
 /* Gesture functions */
 #if FTS_GESTURE_EN
@@ -263,6 +245,7 @@ void fts_tp_state_recovery(struct i2c_client *client);
 int fts_ex_mode_init(struct i2c_client *client);
 int fts_ex_mode_exit(struct i2c_client *client);
 int fts_ex_mode_recovery(struct i2c_client *client);
+int fts_enter_glove_mode( struct i2c_client *client, int mode);
 
 void fts_irq_disable(void);
 void fts_irq_enable(void);

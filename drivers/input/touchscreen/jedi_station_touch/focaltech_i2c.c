@@ -57,6 +57,7 @@ static DEFINE_MUTEX(i2c_rw_access);
 /*****************************************************************************
 * Static function prototypes
 *****************************************************************************/
+extern uint8_t gDongleType;
 
 /*****************************************************************************
 * functions body
@@ -95,7 +96,12 @@ int fts_i2c_read(struct i2c_client *client, char *writebuf, int writelen, char *
             for (i = 0; i < I2C_RETRY_NUMBER; i++) {
                 ret = i2c_transfer(client->adapter, msgs, 2);
                 if (ret < 0) {
-                    FTS_ERROR("[IIC]: i2c_transfer(write) error, ret=%d!!", ret);
+					if (gDongleType==2){
+						FTS_ERROR("[IIC]: i2c_transfer(write) error, ret=%d!!", ret);
+					}else{
+						printk("[station][fts] gdongletype=%d, skip fts_i2c_read function ! \n",gDongleType);
+						break;
+					}
                 } else
                     break;
             }
@@ -111,7 +117,12 @@ int fts_i2c_read(struct i2c_client *client, char *writebuf, int writelen, char *
             for (i = 0; i < I2C_RETRY_NUMBER; i++) {
                 ret = i2c_transfer(client->adapter, msgs, 1);
                 if (ret < 0) {
-                    FTS_ERROR("[IIC]: i2c_transfer(read) error, ret=%d!!", ret);
+					if (gDongleType==2){
+						FTS_ERROR("[IIC]: i2c_transfer(read) error, ret=%d!!", ret);
+					}else{
+						printk("[station][fts] gdongletype=%d, skip fts_i2c_read function ! \n",gDongleType);
+						break;
+					}
                 } else
                     break;
             }
@@ -147,7 +158,12 @@ int fts_i2c_write(struct i2c_client *client, char *writebuf, int writelen)
         for (i = 0; i < I2C_RETRY_NUMBER; i++) {
             ret = i2c_transfer(client->adapter, msgs, 1);
             if (ret < 0) {
-                FTS_ERROR("%s: i2c_transfer(write) error, ret=%d", __func__, ret);
+					if (gDongleType==2){
+						FTS_ERROR("%s: i2c_transfer(write) error, ret=%d", __func__, ret);
+					}else{
+						printk("[station][fts] gdongletype=%d, skip fts_i2c_write function ! \n",gDongleType);
+						break;
+					}            
             } else
                 break;
         }

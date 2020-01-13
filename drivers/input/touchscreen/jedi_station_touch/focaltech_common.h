@@ -143,17 +143,17 @@ struct ts_ic_info {
 #if (FTS_DEBUG_LEVEL == 2)
 #define FTS_DEBUG(fmt, args...) printk("[FTS][%s]"fmt"\n", __func__, ##args)
 #else
-#define FTS_DEBUG(fmt, args...) printk("[FTS]"fmt"\n", ##args)
+#define FTS_DEBUG(fmt, args...) printk("[FTS][station]"fmt"\n", ##args)
 #endif
-#define FTS_FUNC_ENTER() printk("[FTS]%s: Enter\n", __func__)
-#define FTS_FUNC_EXIT()  printk("[FTS]%s: Exit(%d)\n", __func__, __LINE__)
+#define FTS_FUNC_ENTER() printk("[FTS][station]%s: Enter\n", __func__)
+#define FTS_FUNC_EXIT()  printk("[FTS][station]%s: Exit(%d)\n", __func__, __LINE__)
 #else /* #if FTS_DEBUG_EN*/
 #define FTS_DEBUG(fmt, args...)
 #define FTS_FUNC_ENTER()
 #define FTS_FUNC_EXIT()
 #endif
 
-#define FTS_INFO(fmt, args...) printk("[FTS][Info]"fmt"\n", ##args)
-#define FTS_ERROR(fmt, args...) printk("[FTS][Error]"fmt"\n", ##args)
+#define FTS_INFO(fmt, args...) printk("[FTS][station][Info]"fmt"\n", ##args)
+#define FTS_ERROR(fmt, args...) printk("[FTS][station][Error]"fmt"\n", ##args)
 
 #endif /* __LINUX_FOCALTECH_COMMON_H__ */

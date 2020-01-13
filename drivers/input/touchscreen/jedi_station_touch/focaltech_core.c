@@ -32,7 +32,6 @@
 * Included header files
 *****************************************************************************/
 #include "focaltech_core.h"
-#include <linux/pm_runtime.h>
 #if defined(CONFIG_FB)
 #include <linux/notifier.h>
 #include <linux/fb.h>
@@ -40,13 +39,11 @@
 #include <linux/earlysuspend.h>
 #define FTS_SUSPEND_LEVEL 1     /* Early-suspend level */
 #endif
-/*#include <linux/switch/switch.h>
-extern int switch_dev_register(struct switch_dev *sdev);*/
-
+#define Station_TP_RST 32
 /*****************************************************************************
 * Private constant and macro definitions using #define
 *****************************************************************************/
-#define FTS_DRIVER_NAME                     "fts_ts"
+#define FTS_DRIVER_NAME                     "fts_ts_station"
 #define INTERVAL_READ_REG                   100  /* unit:ms */
 #define TIMEOUT_READ_REG                    1000 /* unit:ms */
 #if FTS_POWER_SOURCE_CUST_EN
@@ -55,83 +52,47 @@ extern int switch_dev_register(struct switch_dev *sdev);*/
 #define FTS_I2C_VTG_MIN_UV                  1800000
 #define FTS_I2C_VTG_MAX_UV                  1800000
 #endif
-
+extern uint8_t gDongleType;
+extern int hid_to_gpio_set(u8 gpio, u8 value);
+extern int asus_wait4hid(void);
+extern int fts_glove_mode_flag;
 /*****************************************************************************
 * Global variable or extern global variabls/functions
 *****************************************************************************/
 struct fts_ts_data *fts_data;
-u8 FTS_gesture_register_d1;
-u8 FTS_gesture_register_d2;
-u8 FTS_gesture_register_d5;
-u8 FTS_gesture_register_d6;
-u8 FTS_gesture_register_d7;
-bool fts_gesture_check(void);
+
 /*****************************************************************************
 * Static function prototypes
 *****************************************************************************/
 static void fts_release_all_finger(void);
-/*static int fts_ts_suspend(struct device *dev);
-static int fts_ts_resume(struct device *dev);*/
-int fts_ts_suspend(void);
-int fts_ts_resume(void);
+/*static int fts_station_suspend(struct device *dev);
+static int fts_station_resume(struct device *dev);*/
+int fts_station_ts_suspend(void);
+int fts_station_ts_resume(void);
 
 /* +++ asus add for print touch location +++ */
 int report_touch_locatoin_count[10];
 /* --- asus add for print touch location --- */
 static bool touch_down_up_status;
-int focal_init_success = 0;
-int gesture_flag =0 ;
-bool disable_tp_flag;
-EXPORT_SYMBOL(disable_tp_flag);
-bool report_touch_log=false;
-EXPORT_SYMBOL(report_touch_log);
+int focal_station_init_success = 0;
+int IRQ_Request=0;
+bool disable_station_tp_flag;
+EXPORT_SYMBOL(disable_station_tp_flag);
+bool airtrigger_station_tp_flag=false;
+EXPORT_SYMBOL(airtrigger_station_tp_flag);
 
-bool airtrigger_tp_flag=false;
-EXPORT_SYMBOL(airtrigger_tp_flag);
-
-u16 airtrigger_x=500;
-u16 airtrigger_y=1000;
-int finger_R=10;
+u16 airtrigger_station_x=500;
+u16 airtrigger_station_y=1000;
+int finger_station_R=10;
 int fig_R=0,fig_L=0;
 
-int max_pressure = 90;
-int init_pressure = 60;
+static void focal_station_suspend_work(void);
+static void focal_station_resume_work(struct work_struct *work);
 
-static void focal_suspend_work(void);
-static void focal_resume_work(struct work_struct *work);
-static void focal_ReadGesture_work(struct work_struct *work);
-
-typedef struct{
-	int (*resume_function)(void);
-	int (*suspend_function)(void);
-	void (*enter_glove_function)(bool mode);
-	void (*station_disable_touch_function)(bool flag);
-	
-}asus_station_touch;
-static asus_station_touch station_touch;
-
-void station_touch_suspend(int (*suspend_function)(void)){
-	station_touch.suspend_function = suspend_function;
-}
-EXPORT_SYMBOL(station_touch_suspend);
-
-void station_touch_resume(int (*resume_function)(void)){
-	station_touch.resume_function = resume_function;
-}
-EXPORT_SYMBOL(station_touch_resume);
-
-void station_enter_glove_function(void (*enter_glove_function)(bool mode)){
-	station_touch.enter_glove_function = enter_glove_function;
-}
-EXPORT_SYMBOL(station_enter_glove_function);
-
-void station_disable_touch_function(void (*ftxxxx_disable_station_touch)(bool flag)){
-	station_touch.station_disable_touch_function = ftxxxx_disable_station_touch;
-}
-EXPORT_SYMBOL(station_disable_touch_function);
-
-extern uint8_t gDongleType;
-
+extern void station_touch_resume(int (*resume_function)(void));
+extern void station_touch_suspend(int (*suspend_function)(void));
+extern void station_enter_glove_function(void(* enter_glove_function)(bool mode));
+extern void station_disable_touch_function(void (*ftxxxx_disable_station_touch)(bool flag));
 
 
 /*****************************************************************************
@@ -220,6 +181,7 @@ static int fts_get_ic_information(struct fts_ts_data *ts_data)
     u8 chip_id[2] = { 0 };
     u8 id_cmd[4] = { 0 };
     u32 id_cmd_len = 0;
+	u8 fwver = 0;
     struct i2c_client *client = ts_data->client;
 
     ts_data->ic_info.is_incell = FTS_CHIP_IDC;
@@ -228,15 +190,25 @@ static int fts_get_ic_information(struct fts_ts_data *ts_data)
         ret = fts_i2c_read_reg(client, FTS_REG_CHIP_ID, &chip_id[0]);
         ret = fts_i2c_read_reg(client, FTS_REG_CHIP_ID2, &chip_id[1]);
         if ((ret < 0) || (0x0 == chip_id[0]) || (0x0 == chip_id[1])) {
-            FTS_DEBUG("i2c read invalid, read:0x%02x%02x", chip_id[0], chip_id[1]);
+			if (gDongleType==2){
+				FTS_DEBUG("i2c read invalid, read:0x%02x%02x", chip_id[0], chip_id[1]);
+			}else{
+					printk("[station][fts] gdongletype=%d, skip fts_i2c_read function ! \n",gDongleType);
+					return -EIO;
+			}
         } else {
             ret = fts_get_chip_types(ts_data, chip_id[0], chip_id[1], VALID);
             if (!ret)
                 break;
-            else
-                FTS_DEBUG("TP not ready, read:0x%02x%02x", chip_id[0], chip_id[1]);
+            else{
+				if (gDongleType==2){
+					FTS_DEBUG("TP not ready, read:0x%02x%02x", chip_id[0], chip_id[1]);
+				}else{
+					printk("[station][fts] gdongletype=%d, skip fts_get_chip_types function ! \n",gDongleType);
+					return -EIO;
+				}
+			}
         }
-
         cnt++;
         msleep(INTERVAL_READ_REG);
     } while ((cnt * INTERVAL_READ_REG) < TIMEOUT_READ_REG);
@@ -274,10 +246,13 @@ static int fts_get_ic_information(struct fts_ts_data *ts_data)
             return ret;
         }
     }
+	if (fts_i2c_read_reg(client, FTS_REG_FW_VER, &fwver) < 0) {
+			FTS_ERROR("read fw_version fail \n");
+		}
 
-    FTS_INFO("get ic information, chip id = 0x%02x%02x",
-             ts_data->ic_info.ids.chip_idh, ts_data->ic_info.ids.chip_idl);
-
+    FTS_INFO("get ic information, chip id = 0x%02x%02x fw_version=%02x ",
+             ts_data->ic_info.ids.chip_idh, ts_data->ic_info.ids.chip_idl,fwver);
+	
     return 0;
 }
 
@@ -303,97 +278,95 @@ void fts_tp_state_recovery(struct i2c_client *client)
 #endif
     FTS_FUNC_EXIT();
 }
-void ftxxxx_disable_touch(bool flag)
+void ftxxxx_disable_station_touch(bool flag)
 {
 	
 	if (flag) {
-		disable_tp_flag = true;
+		disable_station_tp_flag = true;
 		fts_release_all_finger();
-		printk("[Focal][Touch] %s: proximity trigger disable touch !\n", __func__);
+		printk("[Focal][station][Touch] %s: disable touch !\n", __func__);
 	} else {
-		disable_tp_flag = false;
-		printk("[Focal][Touch] %s: proximity trigger enable touch  !\n", __func__);
+		disable_station_tp_flag = false;
+		printk("[Focal][station][Touch] %s: enable touch  !\n", __func__);
 	}
 	
 }
-EXPORT_SYMBOL(ftxxxx_disable_touch);
-
-void ftxxxx_report_touch(bool flag)
-{
-	
+EXPORT_SYMBOL(ftxxxx_disable_station_touch);
+void enter_glove_mode (bool flag){
+	int ret=0;
 	if (flag) {
-		report_touch_log = true;
-		printk("[Focal][Touch] %s: enable report all touch log !\n", __func__);
-	} else {
-		report_touch_log = false;
-		printk("[Focal][Touch] %s: disable report all touch log  !\n", __func__);
-	}
-	
+        if (!fts_glove_mode_flag) {
+            FTS_INFO("[Mode]enter glove mode");
+            ret = fts_enter_glove_mode(fts_data->client, true);
+            if (ret >= 0) {
+                fts_glove_mode_flag = true;
+            }
+        }
+    } else if (flag == 0) {
+        if (fts_glove_mode_flag) {
+            FTS_INFO("[Mode]exit glove mode");
+            ret = fts_enter_glove_mode(fts_data->client, false);
+            if (ret >= 0) {
+                fts_glove_mode_flag = false;
+            }
+        }
+    }
+
 }
-EXPORT_SYMBOL(ftxxxx_report_touch);
 
-
-void station_touch_glove(bool flag)
-{
-	if(station_touch.enter_glove_function){
-		if (flag) {
-			station_touch.enter_glove_function(true);
-			FTS_INFO("[station][Mode]exit glove mode");
-		} else {
-			station_touch.enter_glove_function(false);
-			FTS_INFO("[station][Mode]exit glove mode");
-		}
-	}else{ 
-		printk("[fts][touch]%s:no station \n",__func__);
-	}
-	
-}
-EXPORT_SYMBOL(station_touch_glove);
-
-
-void airtrigger_touch(bool flag)
+void airtrigger_station_touch(bool flag)
 {	
 	if (flag) {
-		if (finger_R == 9)
-			fig_L=1;
-		if (finger_R == 8)
+		if (finger_station_R == 9)
+        {
+			if(fig_L == 1)
+                return;
+            fig_L = 1;
+        }
+		if (finger_station_R == 8)
+        {
+            if(fig_R == 1)
+                return;
 			fig_R=1;
-		airtrigger_tp_flag=true;
-		printk("[Focal][Touch] %s: airtrigger report touch down !\n", __func__);
-		input_mt_slot(fts_data->input_dev, finger_R);
+        }
+		airtrigger_station_tp_flag=true;
+        printk("[FTS][station][Touch] %s: airtrigger report touch down  L=%d, R=%d !\n", __func__,fig_L,fig_R);
+		
+		input_mt_slot(fts_data->input_dev, finger_station_R);
 		input_mt_report_slot_state(fts_data->input_dev, MT_TOOL_FINGER, true);
-		input_report_abs(fts_data->input_dev, ABS_MT_PRESSURE, init_pressure);
+		input_report_abs(fts_data->input_dev, ABS_MT_PRESSURE, 0x3f);
 		input_report_abs(fts_data->input_dev, ABS_MT_TOUCH_MAJOR, 0x09);
-		input_report_abs(fts_data->input_dev, ABS_MT_POSITION_X_F, airtrigger_x);
-		input_report_abs(fts_data->input_dev, ABS_MT_POSITION_Y_F, airtrigger_y);
-		printk("[Focal][Touch] %s: airtrigger report touch x=%d ,y=%d !\n", __func__,airtrigger_x,airtrigger_y);
+		input_report_abs(fts_data->input_dev, ABS_MT_POSITION_X, airtrigger_station_x);
+		input_report_abs(fts_data->input_dev, ABS_MT_POSITION_Y, airtrigger_station_y);
+		printk("[FTS][Touch] %s: airtrigger finger_R=%d report touch x=%d ,y=%d, L=%d, R=%d !\n", __func__, finger_station_R,airtrigger_station_x,airtrigger_station_y, fig_L,fig_R);
 		input_report_key(fts_data->input_dev, BTN_TOUCH, 1);
 		input_sync(fts_data->input_dev);
-		if(init_pressure < max_pressure){
-		  init_pressure +=5;
-		}
-		if(init_pressure >= max_pressure)
-		  init_pressure = 60;
 	} else {
-		if (finger_R == 9)
-			fig_L=0;
-		if (finger_R ==8)
+		if (finger_station_R == 9)
+        {
+			if(fig_L == 0)
+                return;
+            fig_L = 0;
+        }
+		if (finger_station_R ==8)
+        {
+            if(fig_R == 0)
+                return;
 			fig_R=0;
-		if ((fig_L==0)&&(fig_R==0)){
-			printk("[Focal][Touch] %s:  L=%d, R=%d !\n", __func__,fig_L,fig_R);
-			airtrigger_tp_flag=false;
 		}
-		printk("[Focal][Touch] %s: finger_R=%d airtrigger report touch up  !\n", __func__,finger_R);
-		input_mt_slot(fts_data->input_dev, finger_R);
+		input_mt_slot(fts_data->input_dev, finger_station_R);
         input_mt_report_slot_state(fts_data->input_dev, MT_TOOL_FINGER, false);
 		//input_report_key(fts_data->input_dev, BTN_TOUCH, 0);
 		input_sync(fts_data->input_dev);
+if ((fig_L==0)&&(fig_R==0)){
+			printk("[Focal][station][Touch] %s:  L=%d, R=%d !\n", __func__,fig_L,fig_R);
+			airtrigger_station_tp_flag=false;
+			}
+		printk("[FTS][station][Touch] %s: finger_R=%d airtrigger report touch up  !\n", __func__,finger_station_R);
 	}
 	
 }
-EXPORT_SYMBOL(airtrigger_touch);
-
-
+EXPORT_SYMBOL(airtrigger_station_touch);
 
 /*****************************************************************************
 *  Name: fts_reset_proc
@@ -404,11 +377,28 @@ EXPORT_SYMBOL(airtrigger_touch);
 *****************************************************************************/
 int fts_reset_proc(int hdelayms)
 {
+	int check=1;
+	int i=1;
     FTS_FUNC_ENTER();
+	check=asus_wait4hid();
+	if (check == -9)
+		return -1;
 	
-    gpio_set_value(fts_data->pdata->reset_gpio, 0);
+	for (i=1;i<3;i++){
+		if (check<0){
+			printk("[station][touch]hid_status = %d ,retry=%d wait for hid \n",check,i);
+			check=asus_wait4hid();
+			if (check == -9)
+				return -1;
+			printk("[station][touch]hid_status = %d ,check hid ok \n",check);
+		}else{
+			printk("[station][touch]hid_status = %d ,check hid ok \n",check);
+			i=3;
+		}
+	}	
+    hid_to_gpio_set(Station_TP_RST, 0);
     msleep(20);
-    gpio_set_value(fts_data->pdata->reset_gpio, 1);
+    hid_to_gpio_set(Station_TP_RST, 1);
     
     msleep(hdelayms);
     
@@ -669,7 +659,6 @@ static int fts_pinctrl_select_release(struct fts_ts_data *ts)
 
 #endif /* FTS_POWER_SOURCE_CUST_EN */
 
-
 /*****************************************************************************
 *  Reprot related
 *****************************************************************************/
@@ -721,7 +710,7 @@ static void fts_release_all_finger(void)
 #endif
     input_report_key(input_dev, BTN_TOUCH, 0);
     input_sync(input_dev);
-	airtrigger_tp_flag=false;
+	airtrigger_station_tp_flag=false;
     mutex_unlock(&fts_data->report_mutex);
     FTS_FUNC_EXIT();
 }
@@ -806,13 +795,8 @@ static int fts_input_report_b(struct fts_ts_data *data)
             touchs |= BIT(events[i].id);
             data->touchs |= BIT(events[i].id);
 		/* +++  add for print touch location +++ */
-			if (report_touch_log==1){ //add for all report touch log
-				FTS_DEBUG("[FTS][report] id=%d ,x=%d ,y=%d ,press=%d ,area=%d  ", events[i].id, events[i].x,
-                      events[i].y, events[i].p, events[i].area);
-				}
-				
 			if ((report_touch_locatoin_count[i] % 200) == 0) {
-			FTS_DEBUG("[Focal][Touch] id=%d ,x=%d ,y=%d ,press=%d ,area=%d  ", events[i].id, events[i].x,
+			FTS_DEBUG("[Focal][station][Touch] id=%d ,x=%d ,y=%d ,press=%d ,area=%d  ", events[i].id, events[i].x,
                       events[i].y, events[i].p, events[i].area);
 					  report_touch_locatoin_count[i] = 1;
 			}
@@ -827,35 +811,28 @@ static int fts_input_report_b(struct fts_ts_data *data)
 			/* --- asus add for print touch location --- */
             input_mt_report_slot_state(data->input_dev, MT_TOOL_FINGER, false);
             data->touchs &= ~BIT(events[i].id);
-			if (report_touch_log==1){ //add for all report touch log
-            	FTS_DEBUG("[FTS][report]id=%d UP! ", events[i].id);
-			}
+          //  FTS_DEBUG("[B]P%d UP!", events[i].id);
         }
     }
-	if (!airtrigger_tp_flag){
+	if (!airtrigger_station_tp_flag){
     if (unlikely(data->touchs ^ touchs)) {
         for (i = 0; i < max_touch_num; i++)  {
             if (BIT(i) & (data->touchs ^ touchs)) {
-				if (report_touch_log==1){ //add for all report touch log
-                	FTS_DEBUG("[FTS][report]id= %d UP!", i);
-				}
+               // FTS_DEBUG("[B]P%d UP!", i);
                 va_reported = true;
                 input_mt_slot(data->input_dev, i);
                 input_mt_report_slot_state(data->input_dev, MT_TOOL_FINGER, false);
             }
         }
     }
-
     data->touchs = touchs;
 
     if (va_reported) {
         /* touchs==0, there's no point but key */
         if (EVENT_NO_DOWN(data) || (!touchs)) {
-            if (report_touch_log==1){ //add for all report touch log
-            	FTS_DEBUG("[FTS][report]Points All Up!");
-            }
+            //FTS_DEBUG("[B]Points All Up!");
 		if (touch_down_up_status == 1) {
-			printk("[Focal][Touch] touch up !\n");
+			printk("[Focal][station][Touch] touch up !\n");
 			touch_down_up_status = 0;
 		}
 		/* +++ asus add for print touch location +++ */
@@ -865,8 +842,8 @@ static int fts_input_report_b(struct fts_ts_data *data)
         } else {
 		if (touch_down_up_status == 0) {
 			touch_down_up_status = 1;
-				printk("[Focal][Touch] touch down !\n");
-			FTS_DEBUG("[Focal][Touch] id=%d ,x=%d ,y=%d ,press=%d ,area=%d  ", events[0].id, events[0].x,
+				printk("[Focal][station][Touch] touch down !\n");
+			FTS_DEBUG("[Focal][station][Touch] id=%d ,x=%d ,y=%d ,press=%d ,area=%d  ", events[0].id, events[0].x,
                       events[0].y, events[0].p, events[0].area);
 		}
             input_report_key(data->input_dev, BTN_TOUCH, 1);
@@ -952,55 +929,16 @@ static int fts_read_touchdata(struct fts_ts_data *data)
     int i = 0;
     u8 pointid;
     int base;
-	u8 state;
     struct ts_event *events = data->events;
     int max_touch_num = data->pdata->max_touch_number;
     u8 *buf = data->point_buf;
     struct i2c_client *client = data->client;
-	//int time=5;
+
 #if FTS_GESTURE_EN
-
-	if (data->suspended)
-		{
-		printk("[touch]interrupt for gesture! \n");
-		if (gDongleType==2){
-			printk("[touch][fts] in station skip report gesture ! \n");
-			return 1;
-			}
-		if ((fts_data->dclick_mode_eable == 1) | (fts_data->swipeup_mode_eable == 1) | (fts_data->gesture_mode_eable == 1)) {
-			ret=i2c_smbus_read_i2c_block_data(fts_data->client, 0xd0, 1, &state);
-			if (ret<0){
-				gesture_flag=1;
-				printk("[touch] gesture read i2c fail \n");
-				}
-			else
-				if (state==1){
-					 pr_err("[fts][touch] read gesture id ! \n ");
-					 fts_gesture_readdata(data);
-					 }
-				
-		}
-		return 1;
-			/*if ((fts_data->dclick_mode_eable == 1) | (fts_data->swipeup_mode_eable == 1) | (fts_data->gesture_mode_eable == 1)) {
-				for (i=0; i<time; i++){
-					if (!pm_runtime_enabled(&fts_data->client->dev)){
-					 	i2c_smbus_read_i2c_block_data(fts_data->client, 0xd0, 1, &state);
-                   		break;
-					}
-					FTS_ERROR("[pm_runtime_enabled]=%d, error,retry=%d",pm_runtime_enabled(&fts_data->client->dev),i);	
-				}
-				 if (state==1){
-					 pr_err("[fts][touch] read gesture id ! \n ");
-					 fts_gesture_readdata(data);
-					 }
-				
-			 }*/
-		 }
-
-   /* if (0 == fts_gesture_readdata(data)) {
+    if (0 == fts_gesture_readdata(data)) {
         FTS_INFO("succuss to get gesture data in irq handler");
         return 1;
-    }*/
+    }
 #endif
 
 #if FTS_POINT_REPORT_CHECK_EN
@@ -1012,13 +950,12 @@ static int fts_read_touchdata(struct fts_ts_data *data)
 
     memset(buf, 0xFF, data->pnt_buf_size);
     buf[0] = 0x00;
-	//printk("[focal]start read touch \n");
+
     ret = fts_i2c_read(data->client, buf, 1, buf, data->pnt_buf_size);
     if (ret < 0) {
         FTS_ERROR("read touchdata failed, ret:%d", ret);
         return ret;
     }
-	//printk("[focal]end read touch \n");
     data->point_num = buf[FTS_TOUCH_POINT_NUM] & 0x0F;
 
     if (data->ic_info.is_incell) {
@@ -1110,14 +1047,15 @@ static irqreturn_t fts_ts_interrupt(int irq, void *data)
 #if FTS_ESDCHECK_EN
     fts_esdcheck_set_intr(1);
 #endif
-
-    ret = fts_read_touchdata(ts_data);
-    if (ret == 0 && (!disable_tp_flag)) {
-        mutex_lock(&ts_data->report_mutex);  
-        fts_report_event(ts_data);
-        mutex_unlock(&ts_data->report_mutex);
-    }
-
+	if (gDongleType==2){
+    	ret = fts_read_touchdata(ts_data);
+    	if (ret == 0 && (!disable_station_tp_flag)) {
+        	mutex_lock(&ts_data->report_mutex);
+        	fts_report_event(ts_data);
+        	mutex_unlock(&ts_data->report_mutex);
+    	}
+	}else
+		printk("[station][fts] gdongletype=%d, skip read data \n",gDongleType);
 #if FTS_ESDCHECK_EN
     fts_esdcheck_set_intr(0);
 #endif
@@ -1447,7 +1385,7 @@ static int fb_notifier_callback(struct notifier_block *self,
     int *blank;
     struct fts_ts_data *fts_data =
         container_of(self, struct fts_ts_data, fb_notif);
-
+	printk("[fts][station_touch]fb_notifier_callback :enter\n");
     if (evdata && evdata->data && event == FB_EVENT_BLANK &&
         fts_data && fts_data->client) {
         blank = evdata->data;
@@ -1456,7 +1394,7 @@ static int fb_notifier_callback(struct notifier_block *self,
         else if (*blank == FB_BLANK_POWERDOWN)
            fts_ts_suspend(&fts_data->client->dev);*/
     }
-
+	printk("[fts][station_touch]fb_notifier_callback :exit\n");
     return 0;
 }
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
@@ -1473,7 +1411,7 @@ static void fts_ts_early_suspend(struct early_suspend *handler)
                                             struct fts_ts_data,
                                             early_suspend);
 
-   // fts_ts_suspend(&data->client->dev);
+   //fts_ts_suspend(&data->client->dev);
 }
 
 /*****************************************************************************
@@ -1493,7 +1431,6 @@ static void fts_ts_late_resume(struct early_suspend *handler)
 }
 #endif
 
-
 /*****************************************************************************
 *  Name: fts_ts_probe
 *  Brief:
@@ -1510,7 +1447,7 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
     FTS_FUNC_ENTER();
     if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
         FTS_ERROR("I2C not supported");
-		focal_init_success = 0;
+		focal_station_init_success = 0;
         return -ENODEV;
     }
 
@@ -1518,7 +1455,7 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
         pdata = devm_kzalloc(&client->dev, sizeof(*pdata), GFP_KERNEL);
         if (!pdata) {
             FTS_ERROR("Failed to allocate memory for platform data");
-			focal_init_success = 0;
+			focal_station_init_success = 0;
             return -ENOMEM;
         }
         ret = fts_parse_dt(&client->dev, pdata);
@@ -1530,14 +1467,14 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 
     if (!pdata) {
         FTS_ERROR("no ts platform data found");
-		focal_init_success = 0;
+		focal_station_init_success = 0;
         return -EINVAL;
     }
 
     ts_data = devm_kzalloc(&client->dev, sizeof(*ts_data), GFP_KERNEL);
     if (!ts_data) {
         FTS_ERROR("Failed to allocate memory for fts_data");
-		focal_init_success = 0;
+		focal_station_init_success = 0;
         return -ENOMEM;
     }
 
@@ -1554,36 +1491,18 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
     spin_lock_init(&ts_data->irq_lock);
     mutex_init(&ts_data->report_mutex);
 	mutex_init(&ts_data->suspend_mutex);
-	mutex_init(&ts_data->resume_mutex);
     ret = fts_input_init(ts_data);
     if (ret) {
         FTS_ERROR("fts input initialize fail");
-		focal_init_success = 0;
+		focal_station_init_success = 0;
         goto err_input_init;
     }
-	ts_data->pinctrl = devm_pinctrl_get(&client->dev);
-    if (IS_ERR_OR_NULL(ts_data->pinctrl)) {
-        FTS_ERROR("Failed to get pinctrl, please check dts");
-        ret = PTR_ERR(ts_data->pinctrl);
-        goto err_pinctrl_get;
-    }
-
-    ts_data->pins_active = pinctrl_lookup_state(ts_data->pinctrl, "pmx_ts_active");
-    if (IS_ERR_OR_NULL(ts_data->pins_active)) {
-        FTS_ERROR("Pin state[active] not found");
-        ret = PTR_ERR(ts_data->pins_active);
-        goto err_pinctrl_lookup;
-    }
-	ret = pinctrl_select_state(ts_data->pinctrl, ts_data->pins_active);
-	if (ret < 0) {
-				FTS_ERROR("Set normal pin state error:%d", ret);
-	}
 
 #if FTS_POWER_SOURCE_CUST_EN
     ret = fts_power_source_init(ts_data);
     if (ret) {
         FTS_ERROR("fail to get vdd/vcc_i2c regulator");
-		focal_init_success = 0;
+		focal_station_init_success = 0;
         goto err_power_init;
     }
 
@@ -1591,11 +1510,10 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
     ret = fts_power_source_ctrl(ts_data, ENABLE);
     if (ret) {
         FTS_ERROR("fail to enable vdd/vcc_i2c regulator");
-		focal_init_success = 0;
+		focal_station_init_success = 0;
         goto err_power_ctrl;
     }
-	
-   
+
 #if FTS_PINCTRL_EN
     ret = fts_pinctrl_init(ts_data);
     if (0 == ret) {
@@ -1607,19 +1525,20 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
     ret = fts_gpio_configure(ts_data);
     if (ret) {
         FTS_ERROR("[GPIO]Failed to configure the gpios");
-		focal_init_success = 0;
+		focal_station_init_success = 0;
         goto err_gpio_config;
     }
 
 #if (!FTS_CHIP_IDC)
+	hid_to_gpio_set(Station_TP_RST, 1);
+	msleep(10);
     fts_reset_proc(200);
 #endif
-
 
     ret = fts_get_ic_information(ts_data);
     if (ret) {
         FTS_ERROR("not focal IC, unregister driver");
-		focal_init_success = 0;
+		focal_station_init_success = 0;
         goto err_irq_req;
     }
 
@@ -1648,14 +1567,7 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
     if (ret) {
         FTS_ERROR("init glove/cover/charger fail");
     }
-	fts_data->glove_mode_eable = 0;
-	fts_data->pocket_mode_eable = 0;
-	fts_data->game_mode_eable = 0;
-	fts_data->checkG_game_mode_eable = 0;
-	fts_data->dclick_mode_eable = 0;
-	fts_data->swipeup_mode_eable = 0;
-	fts_data->gesture_mode_eable = 0;
-	fts_data->gesture_mode_type = 0;
+
 #if FTS_GESTURE_EN
     ret = fts_gesture_init(ts_data);
     if (ret) {
@@ -1679,17 +1591,15 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 
     ret = fts_irq_registration(ts_data);
     if (ret) {
-        FTS_ERROR("request irq failed");
-		focal_init_success = 0;
+        FTS_ERROR("request irq failed,ret=%d",ret);
+		IRQ_Request=0;
+		focal_station_init_success = 0;
         goto err_irq_req;
-    }
-	/*ts_data->touch_edev=extcon_dev_allocate(asus_touch);
-	ts_data->touch_edev->fnode_name= "touch";
-	if (extcon_dev_register(ts_data->touch_edev) < 0)
-	{
-		printk("[Focal][TOUCH_ERR] %s: failed to register switch_dev \n", __func__);
-		goto exit_err_edev_register_fail;
-	}*/
+    }else{
+    	IRQ_Request=1;
+		printk("[fts][station] request irq ok \n");
+    	}
+    	
 
 #if FTS_AUTO_UPGRADE_EN
     ret = fts_fwupg_init(ts_data);
@@ -1697,27 +1607,18 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
         FTS_ERROR("init fw upgrade fail");
     }
 #endif
-	
-	ts_data->suspend_resume_wq = create_singlethread_workqueue("focal_suspend_resume_wq");
+	ts_data->suspend_resume_wq = create_singlethread_workqueue("focal_station_suspend_resume_wq");
 	if (NULL == ts_data->suspend_resume_wq) {
 		
-		printk("[Focal][TOUCH_ERR] %s: create resume workqueue failed\n", __func__);
+		printk("[Focal][station][TOUCH_ERR] %s: create resume workqueue failed\n", __func__);
 		goto err_create_wq_failed;
 	}
 
-//jacob add for read gesture work
-    ts_data->read_gesture_wq = create_singlethread_workqueue("focal_read_gesture_wq");
-    if (NULL == ts_data->read_gesture_wq) {
-        
-        printk("[Focal][TOUCH_ERR] %s: create readgesture workqueue failed\n", __func__);
-        goto err_create_wq_failed;
-    }
-//jacob add for read gesture work
-    
-
-	INIT_WORK(&ts_data->resume_work, focal_resume_work);
-    INIT_WORK(&ts_data->gesturework, focal_ReadGesture_work);
-
+	INIT_WORK(&ts_data->resume_work, focal_station_resume_work);
+	station_touch_suspend(fts_station_ts_suspend);
+	station_touch_resume(fts_station_ts_resume);
+	station_enter_glove_function(enter_glove_mode);
+	station_disable_touch_function(ftxxxx_disable_station_touch);
 #if defined(CONFIG_FB)
     ts_data->fb_notif.notifier_call = fb_notifier_callback;
     ret = fb_register_client(&ts_data->fb_notif);
@@ -1732,111 +1633,42 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 #endif
 
     FTS_FUNC_EXIT();
-	focal_init_success = 1;
+	focal_station_init_success = 1;
     return 0;
 
-//exit_err_edev_register_fail:
+	
+err_create_wq_failed:
+		if (ts_data->suspend_resume_wq) {
+				destroy_workqueue(ts_data->suspend_resume_wq);
+			}
 err_irq_req:
-    if (gpio_is_valid(pdata->reset_gpio))
+   /* if (gpio_is_valid(pdata->reset_gpio))
         gpio_free(pdata->reset_gpio);
     if (gpio_is_valid(pdata->irq_gpio))
-        gpio_free(pdata->irq_gpio);
-err_pinctrl_lookup:
-	if (ts_data->pinctrl) {
-			devm_pinctrl_put(ts_data->pinctrl);
-	}
-err_pinctrl_get:
-	ts_data->pinctrl = NULL;
-	ts_data->pins_active = NULL;
-
+        gpio_free(pdata->irq_gpio);*/
 err_gpio_config:
 #if FTS_POWER_SOURCE_CUST_EN
+#if FTS_PINCTRL_EN
+    fts_pinctrl_select_release(ts_data);
+#endif
     fts_power_source_ctrl(ts_data, DISABLE);
 err_power_ctrl:
     fts_power_source_release(ts_data);
 err_power_init:
 #endif
-    kfree_safe(ts_data->point_buf);
+   /* kfree_safe(ts_data->point_buf);
     kfree_safe(ts_data->events);
-    input_unregister_device(ts_data->input_dev);
+    input_unregister_device(ts_data->input_dev);*/
 err_input_init:
-    if (ts_data->ts_workqueue)
+   /* if (ts_data->ts_workqueue)
         destroy_workqueue(ts_data->ts_workqueue);
-    devm_kfree(&client->dev, ts_data);
-	
-
-err_create_wq_failed:
-	if (ts_data->suspend_resume_wq) {
-			destroy_workqueue(ts_data->suspend_resume_wq);
-		}
-
-    if (ts_data->read_gesture_wq) {
-            destroy_workqueue(ts_data->read_gesture_wq);
-        }
-
+    devm_kfree(&client->dev, ts_data);*/
+    fts_irq_disable();
+	printk("[Focal][station][TOUCH_ERR] %s: probe failed\n", __func__);
     FTS_FUNC_EXIT();
-    return ret;
-}
-void fts_ts_shutdown(struct i2c_client *client)
-{	
-	if (focal_init_success==1){
-		struct fts_ts_data *ftxxxx_ts;
-		ftxxxx_ts = i2c_get_clientdata(client);
-    	if (gpio_is_valid(ftxxxx_ts->pdata->irq_gpio)) {
-        	free_irq(client->irq, ftxxxx_ts);
-        	gpio_free(ftxxxx_ts->pdata->irq_gpio);
-    	}
-		gpio_direction_output(fts_data->pdata->reset_gpio, 0);
-		gpio_set_value(ftxxxx_ts->pdata->reset_gpio, 0);
-		printk("[touch] reset_gpio =0\n");
-		}
-	else
-		printk("[FTS][touch]%s: focal touch not work skip showtown \n", __func__);
-	
-	
-}
-static int fts_i2c_suspend(struct device *dev)
-{
-    printk("[touch][fts]fts suspend function! \n");
+   
     return 0;
 }
-
-//jacob add for read gesture
-static void focal_ReadGesture_work(struct work_struct *work) {
-    u8 state;
-	mutex_lock(&fts_data->resume_mutex);
-    printk("[touch][fts]%s !:start \n", __func__);
-        if(gesture_flag){
-            if ((fts_data->dclick_mode_eable == 1) | (fts_data->swipeup_mode_eable == 1) | (fts_data->gesture_mode_eable == 1)) {
-                i2c_smbus_read_i2c_block_data(fts_data->client, 0xd0, 1, &state);          
-                if (state==1){
-                     pr_err("[fts][touch] %s : read gesture id ! \n ", __func__);
-                     fts_gesture_readdata(fts_data);
-                }else
-                	printk("[touch][fts]%s :state=%d ! \n", __func__,state);
-				
-            }
-            gesture_flag=0;
-         }
-	mutex_unlock(&fts_data->resume_mutex);
-	printk("[touch][fts]%s :exit! \n", __func__);
-}
-//jacob add for read gesture
-
-static int fts_resume(struct device *dev)
-{	
-
-	printk("[touch][fts]fts resume function! \n");
-	if (focal_init_success==1){
-		if (fts_data->suspended) {
-            queue_work(fts_data->read_gesture_wq, &fts_data->gesturework);
-		}
-	}
-	else
-		printk("[FTS][touch]%s: focal touch not work skip resume \n", __func__);
-	return 0;
-}
-
 
 /*****************************************************************************
 *  Name: fts_ts_remove
@@ -1850,7 +1682,14 @@ static int fts_ts_remove(struct i2c_client *client)
     struct fts_ts_data *ts_data = i2c_get_clientdata(client);
 
     FTS_FUNC_ENTER();
-
+	fts_irq_disable();
+	gpio_set_value(fts_data->pdata->irq_gpio, 0);
+	if (IRQ_Request==1)
+		free_irq(client->irq, ts_data);
+	station_touch_suspend(NULL);
+	station_touch_resume(NULL);
+	station_enter_glove_function(NULL);
+	station_disable_touch_function(NULL);
 #if FTS_POINT_REPORT_CHECK_EN
     fts_point_report_check_exit(ts_data);
 #endif
@@ -1886,7 +1725,7 @@ static int fts_ts_remove(struct i2c_client *client)
 	if (ts_data->suspend_resume_wq) {
 		destroy_workqueue(ts_data->suspend_resume_wq);
 	}
-    free_irq(client->irq, ts_data);
+    //free_irq(client->irq, ts_data);
     input_unregister_device(ts_data->input_dev);
 
     if (gpio_is_valid(ts_data->pdata->reset_gpio))
@@ -1915,7 +1754,6 @@ static int fts_ts_remove(struct i2c_client *client)
     return 0;
 }
 
-
 /*****************************************************************************
 *  Name: fts_ts_suspend
 *  Brief:
@@ -1923,10 +1761,9 @@ static int fts_ts_remove(struct i2c_client *client)
 *  Output:
 *  Return:
 *****************************************************************************/
-/*static int fts_ts_suspend(struct device *dev)
+/*static int fts_station_suspend(struct device *dev)
 {
     int ret = 0;
-	int retval = 0;
     struct fts_ts_data *ts_data = dev_get_drvdata(dev);
 
     FTS_FUNC_ENTER();
@@ -1945,24 +1782,10 @@ static int fts_ts_remove(struct i2c_client *client)
 #endif
 
 #if FTS_GESTURE_EN
-
-	if ((ts_data->dclick_mode_eable == 1) | (ts_data->swipeup_mode_eable == 1) | (ts_data->gesture_mode_eable == 1)) {
-		fts_release_all_finger();
-		retval = fts_gesture_suspend(ts_data->client);
-		if (retval == 0)
-		{
-			// Enter into gesture mode(suspend) 
-			retval = enable_irq_wake(ts_data->client->irq);
-			if (retval)
-				printk("[FTS][touch]%s: set_irq_wake failed \n", __func__);
-				ts_data->suspended = true;
-				printk("[FTS][touch]%s: exit \n", __func__);
-					return 0;
-		}
-	}
-
-
-
+    if (fts_gesture_suspend(ts_data->client) == 0) {
+        ts_data->suspended = true;
+        return 0;
+    }
 #endif
 
     fts_irq_disable();
@@ -1986,7 +1809,7 @@ static int fts_ts_remove(struct i2c_client *client)
     FTS_FUNC_EXIT();
     return 0;
 }*/
-static void focal_suspend_work(void)
+static void focal_station_suspend_work(void)
 {	
 //		struct fts_ts_data *data = dev_get_drvdata(dev);
 		int retval = 0;
@@ -1994,8 +1817,8 @@ static void focal_suspend_work(void)
 		printk("[FTS][touch]%s:focal touch suspend \n", __func__);
 		if (fts_data->suspended)
 		{
-			printk("[FTS][touch]%s: Already in suspend state \n", __func__);
-			printk("[FTS][touch]%s: exit \n", __func__);
+			printk("[FTS][station][touch]%s: Already in suspend state \n", __func__);
+			printk("[FTS][station][touch]%s: exit \n", __func__);
 			mutex_unlock(&fts_data->suspend_mutex);
 			return ;
 		}
@@ -2013,7 +1836,7 @@ static void focal_suspend_work(void)
 					printk("[FTS][touch]%s: set_irq_wake failed \n", __func__);
 				fts_data->suspended = true;
 				mutex_unlock(&fts_data->suspend_mutex);
-				printk("[FTS][touch]%s: exit \n", __func__);
+				printk("[FTS][station][touch]%s: exit \n", __func__);
             	fts_release_all_finger();
 				return ;
 			}
@@ -2035,7 +1858,7 @@ static void focal_suspend_work(void)
 		retval = fts_i2c_write_reg(fts_data->client, FTS_REG_POWER_MODE, FTS_REG_POWER_MODE_SLEEP_VALUE);
 		if (retval < 0)
 		{
-			printk("[FTS_err][touch]%s:Set TP to sleep mode fail, ret=%d! \n", __func__, retval);
+			printk("[FTS_err][station][touch]%s:Set TP to sleep mode fail, ret=%d! \n", __func__, retval);
 		}
 		fts_data->suspended = true;
 		mutex_unlock(&fts_data->suspend_mutex);
@@ -2052,14 +1875,14 @@ static void focal_suspend_work(void)
 *  Output:
 *  Return:
 *****************************************************************************/
-static void focal_resume_work(struct work_struct *work)
+static void focal_station_resume_work(struct work_struct *work)
 {		
 		//	struct fts_ts_data *data = dev_get_drvdata(dev);
 			int err;
 			char val;
-			disable_tp_flag= false;
+			disable_station_tp_flag= false;
 			mutex_lock(&fts_data->suspend_mutex);
-			printk("[FTS][touch]%s: Enter\n", __func__);
+			printk("[FTS][station][touch]%s: Enter\n", __func__);
 			if (!fts_data->suspended)
 			{
 				printk("[FTS][touch] %s:Already in awake state exit resume function", __func__);
@@ -2094,18 +1917,17 @@ static void focal_resume_work(struct work_struct *work)
 			fts_tp_state_recovery(fts_data->client);
 		
 			err = fts_i2c_read_reg(fts_data->client, 0xA6, &val);
-			printk("[FTS][Touch] %s:read 0xA6: %02X, ret: %d", __func__, val, err);
+			printk("[FTS][station][Touch] %s:read 0xA6: %02X, ret: %d", __func__, val, err);
 		
 			fts_data->suspended = false;
 		mutex_unlock(&fts_data->suspend_mutex);
-			fts_release_all_finger();
 			fts_irq_enable();
 			//enable_irq(fts_data->irq);
 		
 #if FTS_ESDCHECK_EN
 			fts_esdcheck_resume();
 #endif
-			printk("[FTS][touch]%s: exit \n", __func__);
+			printk("[FTS][station][touch]%s: exit \n", __func__);
 			return ;
 	}
 
@@ -2151,66 +1973,32 @@ static void focal_resume_work(struct work_struct *work)
     FTS_FUNC_EXIT();
     return 0;
 }*/
-int fts_ts_suspend(void)
-{	
-	int rc =1;
-	if (station_touch.station_disable_touch_function){
-		station_touch.station_disable_touch_function(true);
-		printk("[fts][touch] disable station touch ! \n");
-	}
-	if (focal_init_success==1) 
-		focal_suspend_work();
+int fts_station_ts_suspend(void)
+{	if (focal_station_init_success==1) 
+		focal_station_suspend_work();
 	else
-		printk("[FTS][touch]%s: focal touch not work skip suspend \n", __func__);
-	if (station_touch.suspend_function){
-		rc=station_touch.suspend_function();
-		if (rc)
-			printk("[FTS][touch]%s: station touch suspend fail \n",__func__);
-	}
-	else
-		printk("[FTS][touch]%s: no station touch skip station_touch suspend \n",__func__);
-
+		printk("[FTS][station][touch]%s: focal touch not work skip suspend \n", __func__);
 	//queue_work(fts_wq_data->suspend_resume_wq, &fts_wq_data->suspend_work);
 	return 0;	
 }
-EXPORT_SYMBOL(fts_ts_suspend);
-	/*****************************************************************************
-	*  Name: fts_ts_resume
-	*  Brief:
-	*  Input:
-	*  Output:
-	*  Return:
-	*****************************************************************************/
-
-int fts_ts_resume(void)
+//EXPORT_SYMBOL(fts_station_ts_suspend);
+int touch_station_value(void)
+{
+	return focal_station_init_success;
+}
+EXPORT_SYMBOL(touch_station_value);
+int fts_station_ts_resume(void)
 {
 	//focal_resume_work();
-	int rc =1;
-	if (focal_init_success==1)
+	if (focal_station_init_success==1)
 		queue_work(fts_data->suspend_resume_wq, &fts_data->resume_work);
 	else
-		printk("[FTS][touch]%s: focal touch not work skip resume \n", __func__);
-	if (station_touch.resume_function){
-		rc=station_touch.resume_function();
-		if (rc)
-			printk("[FTS][touch]%s: station touch resume fail \n",__func__);
-	}
-	else
-		printk("[FTS][touch]%s: no station touch skip station_touch resume \n",__func__);
+		printk("[FTS][station][touch]%s: focal touch not work skip resume \n", __func__);
 
-	//queue_work(fts_wq_data->suspend_resume_wq, &fts_wq_data->suspend_work);
 	return 0;
 
 }
-EXPORT_SYMBOL(fts_ts_resume);
-
-bool fts_gesture_check(void)
-{
-	return ((fts_data->dclick_mode_eable == 1) | (fts_data->swipeup_mode_eable == 1) | (fts_data->gesture_mode_eable == 1));
-}
-EXPORT_SYMBOL(fts_gesture_check);
-
-
+//EXPORT_SYMBOL(fts_station_ts_resume);
 
 /*****************************************************************************
 * I2C Driver
@@ -2222,29 +2010,27 @@ static const struct i2c_device_id fts_ts_id[] = {
 MODULE_DEVICE_TABLE(i2c, fts_ts_id);
 
 static struct of_device_id fts_match_table[] = {
-    { .compatible = "focaltech,fts", },
+    { .compatible = "focaltech_station,fts", },
     { },
 };
 
 
-static const struct dev_pm_ops fts_i2c_pm_ops = {
-    .suspend = fts_i2c_suspend,
-    .resume = fts_resume,
-};
+/*static const struct dev_pm_ops fts_i2c_pm_ops = {
+    .suspend = fts_station_suspend,
+    .resume = fts_station_resume,
+};*/
 
 static struct i2c_driver fts_ts_driver = {
     .probe = fts_ts_probe,
     .remove = fts_ts_remove,
-    .shutdown =fts_ts_shutdown,
     .driver = {
         .name = FTS_DRIVER_NAME,
         .owner = THIS_MODULE,
-        .pm = &fts_i2c_pm_ops,
+        //.pm = &fts_i2c_pm_ops,
         .of_match_table = fts_match_table,
     },
     .id_table = fts_ts_id,
 };
-
 
 /*****************************************************************************
 *  Name: fts_ts_init

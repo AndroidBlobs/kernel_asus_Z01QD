@@ -34,10 +34,6 @@
 *****************************************************************************/
 #include "focaltech_core.h"
 #include "focaltech_flash.h"
-unsigned char IC_FW;
-u8 g_vendor_id = 0xFF;
-char fw_verison[64]="";
-void fts_show_tpfwver(char *buf);
 
 /*****************************************************************************
 * Static variables
@@ -1767,52 +1763,18 @@ static void fts_fwupg_work(struct work_struct *work)
     FTS_INFO("get upgrade fw file");
     ret = fts_fwupg_get_fw_file(ts_data);
     fts_fwupg_init_ic_detail();
-    if (ret < 0) {
+    /*if (ret < 0) {
         FTS_ERROR("get file fail, can't upgrade");
     } else {
-        /* run auto upgrade */
+        // run auto upgrade 
         fts_fwupg_auto_upgrade(ts_data);
-    }
+    }*/
 
 #if FTS_ESDCHECK_EN
     fts_esdcheck_switch(ENABLE);
 #endif
     fts_irq_enable();
     ts_data->fw_loading = 0;
-	fts_show_tpfwver(fw_verison);	
-	/*ts_data->touch_edev->name = fw_verison;
-	printk("[touch][fts]fw_verison=%s ,touch->name=%s \n",fw_verison,ts_data->touch_edev->name);*/
-	 FTS_FUNC_EXIT();
-}
-void fts_show_tpfwver(char *buf)
-{
-	IC_FW = get_focal_tp_fw();
-	g_vendor_id=get_focal_tp_id();
-	if (IC_FW == 255) {
-		printk("[Focal][Touch] %s :  read FW fail \n ", __func__);
-		snprintf(buf, 64, "get tp fw version fail!\n");
-	} else {
-		printk("[Focal][Touch] %s :  TP_ID = 0x%x touch FW = 0x%x\n ", __func__, g_vendor_id, IC_FW);
-		snprintf(buf, 64, "0x%x-0x%x", g_vendor_id, IC_FW);
-	}
-}
-
-
-u8 get_focal_tp_fw(void)
-{
-	u8 fwver = 0;
-	if (fts_i2c_read_reg(fts_data->client, FTS_REG_FW_VER, &fwver) < 0)
-		return -1;
-	else
-		return fwver;
-}
-u8 get_focal_tp_id(void)
-{
-	u8 tpid = 0;
-	if (fts_i2c_read_reg(fts_data->client, FTS_REG_VENDOR_ID, &tpid) < 0)
-		return -1;
-	else
-		return tpid;
 }
 
 /*****************************************************************************

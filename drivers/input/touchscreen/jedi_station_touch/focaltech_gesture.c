@@ -64,16 +64,10 @@
 #define GESTURE_L                               0x44
 #define GESTURE_S                               0x46
 #define GESTURE_V                               0x54
-#define GESTURE_Z                               0x65
+#define GESTURE_Z                               0x41
 #define GESTURE_C                               0x34
 #define FTS_GESTRUE_POINTS                      255
 #define FTS_GESTRUE_POINTS_HEADER               8
-extern struct fts_ts_data *fts_data;
-extern u8 FTS_gesture_register_d1;
-extern u8 FTS_gesture_register_d2;
-extern u8 FTS_gesture_register_d5;
-extern u8 FTS_gesture_register_d6;
-extern u8 FTS_gesture_register_d7;
 
 /*****************************************************************************
 * Private enumerations, structures and unions using typedef
@@ -105,69 +99,28 @@ static struct fts_gesture_st fts_gesture_data;
 /*****************************************************************************
 * Global variable or extern global variabls/functions
 *****************************************************************************/
-extern bool proximity_check_status(void);
 
 /*****************************************************************************
 * Static function prototypes
 *****************************************************************************/
-/*static ssize_t fts_gesture_show(struct device *dev, struct device_attribute *attr, char *buf);
-static ssize_t fts_gesture_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);*/
+static ssize_t fts_gesture_show(struct device *dev, struct device_attribute *attr, char *buf);
+static ssize_t fts_gesture_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
 static ssize_t fts_gesture_buf_show(struct device *dev, struct device_attribute *attr, char *buf);
 static ssize_t fts_gesture_buf_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
-static ssize_t switch_dclick_mode_show(struct device *dev, struct device_attribute *attr, char *buf);
-static ssize_t switch_dclick_mode_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
-static ssize_t switch_swipeup_mode_show(struct device *dev, struct device_attribute *attr, char *buf);
-static ssize_t switch_swipeup_mode_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
-static ssize_t switch_gesture_mode_show(struct device *dev, struct device_attribute *attr, char *buf);
-static ssize_t switch_gesture_mode_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
-static ssize_t pocket_mode_show(struct device *dev, struct device_attribute *attr, char *buf);
-static ssize_t pocket_mode_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
-static ssize_t game_mode_show(struct device *dev, struct device_attribute *attr, char *buf);
-static ssize_t game_mode_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
-static ssize_t checkG_game_mode_show(struct device *dev, struct device_attribute *attr, char *buf);
-static ssize_t checkG_game_mode_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
-static ssize_t game_mode_show(struct device *dev, struct device_attribute *attr, char *buf);
-static ssize_t game_mode_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
-static ssize_t switch_game_mode_show(struct device *dev, struct device_attribute *attr, char *buf);
-static ssize_t switch_game_mode_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
-
-
-
-
-
-
-
-
-
 
 /* sysfs gesture node
  *   read example: cat  fts_gesture_mode        ---read gesture mode
  *   write example:echo 01 > fts_gesture_mode   ---write gesture mode to 01
  *
  */
-static DEVICE_ATTR (fts_gesture_mode, S_IRUGO | S_IWUSR, switch_gesture_mode_show, switch_gesture_mode_store);
+static DEVICE_ATTR (fts_gesture_mode, S_IRUGO | S_IWUSR, fts_gesture_show, fts_gesture_store);
 /*
  *   read example: cat fts_gesture_buf        ---read gesture buf
  */
 static DEVICE_ATTR (fts_gesture_buf, S_IRUGO | S_IWUSR, fts_gesture_buf_show, fts_gesture_buf_store);
-static DEVICE_ATTR (dclick_mode, S_IRUGO|S_IWUSR, switch_dclick_mode_show, switch_dclick_mode_store);
-static DEVICE_ATTR (swipeup_mode, S_IRUGO|S_IWUSR, switch_swipeup_mode_show, switch_swipeup_mode_store);
-static DEVICE_ATTR (pocket_mode, S_IRUGO|S_IWUSR, pocket_mode_show, pocket_mode_store);
-//add for game mode 
-static DEVICE_ATTR (game_mode, S_IRUGO|S_IWUSR, switch_game_mode_show, switch_game_mode_store);
-static DEVICE_ATTR (checkG90_game_mode, S_IRUGO|S_IWUSR, game_mode_show, game_mode_store);
-static DEVICE_ATTR (checkG270_game_mode, S_IRUGO|S_IWUSR, checkG_game_mode_show, checkG_game_mode_store);
-
-
 static struct attribute *fts_gesture_mode_attrs[] = {
     &dev_attr_fts_gesture_mode.attr,
     &dev_attr_fts_gesture_buf.attr,
-    &dev_attr_dclick_mode.attr,
-    &dev_attr_swipeup_mode.attr,
-    &dev_attr_pocket_mode.attr,
-    &dev_attr_game_mode.attr,
-    &dev_attr_checkG90_game_mode.attr,
-    &dev_attr_checkG270_game_mode.attr,
     NULL,
 };
 
@@ -182,7 +135,7 @@ static struct attribute_group fts_gesture_group = {
 * Output:
 * Return:
 ***********************************************************************/
-/*static ssize_t fts_gesture_show(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t fts_gesture_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
     int count;
     u8 val;
@@ -196,7 +149,7 @@ static struct attribute_group fts_gesture_group = {
     mutex_unlock(&input_dev->mutex);
 
     return count;
-}*/
+}
 
 /************************************************************************
 * Name: fts_gesture_store
@@ -205,7 +158,7 @@ static struct attribute_group fts_gesture_group = {
 * Output:
 * Return:
 ***********************************************************************/
-/*static ssize_t fts_gesture_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t fts_gesture_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
     struct input_dev *input_dev = fts_data->input_dev;
     mutex_lock(&input_dev->mutex);
@@ -219,7 +172,7 @@ static struct attribute_group fts_gesture_group = {
     mutex_unlock(&input_dev->mutex);
 
     return count;
-}*/
+}
 /************************************************************************
 * Name: fts_gesture_buf_show
 *  Brief:
@@ -290,67 +243,57 @@ int fts_create_gesture_sysfs(struct i2c_client *client)
 *****************************************************************************/
 static void fts_gesture_report(struct input_dev *input_dev, int gesture_id)
 {
-    int gesture=0;
-	bool Ps_status = false;
-	FTS_FUNC_ENTER();
-	pr_err("[Focal][Touch] %s :  gesture_id = 0x%x\n ", __func__, gesture_id);
+    int gesture;
 
-	if (!fts_data->pocket_mode_eable)//ignore pocket mode
-	{	
-		Ps_status = proximity_check_status();
-		pr_err("[touch]check proximity status  \n");
-	}
-
-    pr_err("[focal][touch]gesutre id = %x \n",gesture_id);
-	if(!Ps_status){
-    	switch (gesture_id) {
-    		case GESTURE_LEFT:
-        		gesture = KEY_GESTURE_LEFT;
-        		break;
-    		case GESTURE_RIGHT:
-        		gesture = KEY_GESTURE_RIGHT;
-        		break;
-    		case GESTURE_UP:
-        		gesture = KEY_GESTURE_UP;
-        		break;
-    		case GESTURE_DOWN:
-        		gesture = KEY_GESTURE_DOWN;
-        		break;
-    		case GESTURE_DOUBLECLICK:
-        		gesture = KEY_POWER;
-        		break;
-    		case GESTURE_O:
-        		gesture = KEY_GESTURE_O;
-        		break;
-   			case GESTURE_W:
-        		gesture = KEY_GESTURE_W;
-        		break;
-    		case GESTURE_M:
-        		gesture = KEY_GESTURE_M;
-        		break;
-    		case GESTURE_E:
-        		gesture = KEY_GESTURE_E;
-        		break;
-   			case GESTURE_L:
-        		gesture = KEY_GESTURE_L;
-        		break;
-    		case GESTURE_S:
-		        gesture = KEY_GESTURE_S;
-        		break;
-		    case GESTURE_V:
-        		gesture = KEY_GESTURE_V;
-		        break;
-    		case GESTURE_Z:
-		        gesture = KEY_GESTURE_Z;
-        		break;
-		    case  GESTURE_C:
-        		gesture = KEY_GESTURE_C;
-        		break;
-    		default:
-        		gesture = -1;
-        		break;
-    		}
-	}
+    FTS_FUNC_ENTER();
+    FTS_INFO("fts gesture_id==0x%x ", gesture_id);
+    switch (gesture_id) {
+    case GESTURE_LEFT:
+        gesture = KEY_GESTURE_LEFT;
+        break;
+    case GESTURE_RIGHT:
+        gesture = KEY_GESTURE_RIGHT;
+        break;
+    case GESTURE_UP:
+        gesture = KEY_GESTURE_UP;
+        break;
+    case GESTURE_DOWN:
+        gesture = KEY_GESTURE_DOWN;
+        break;
+    case GESTURE_DOUBLECLICK:
+        gesture = KEY_GESTURE_U;
+        break;
+    case GESTURE_O:
+        gesture = KEY_GESTURE_O;
+        break;
+    case GESTURE_W:
+        gesture = KEY_GESTURE_W;
+        break;
+    case GESTURE_M:
+        gesture = KEY_GESTURE_M;
+        break;
+    case GESTURE_E:
+        gesture = KEY_GESTURE_E;
+        break;
+    case GESTURE_L:
+        gesture = KEY_GESTURE_L;
+        break;
+    case GESTURE_S:
+        gesture = KEY_GESTURE_S;
+        break;
+    case GESTURE_V:
+        gesture = KEY_GESTURE_V;
+        break;
+    case GESTURE_Z:
+        gesture = KEY_GESTURE_Z;
+        break;
+    case  GESTURE_C:
+        gesture = KEY_GESTURE_C;
+        break;
+    default:
+        gesture = -1;
+        break;
+    }
     /* report event key */
     if (gesture != -1) {
         FTS_DEBUG("Gesture Code=%d", gesture);
@@ -458,320 +401,6 @@ int fts_gesture_readdata(struct fts_ts_data *ts_data)
 
     return 0;
 }
-static ssize_t switch_dclick_mode_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
-{
-	int tmp = 0;
-
-	tmp = buf[0] - 48;
-
-	if (tmp == 0) {
-
-		fts_data->dclick_mode_eable = 0;
-
-		printk("[Focal][Touch] dclick_mode_disable ! \n");
-
-	} else if (tmp == 1) {
-
-		fts_data->dclick_mode_eable = 1;
-
-		printk("[Focal][Touch] dclick_mode_enable ! \n");
-	}
-
-	return count;
-
-}
-static ssize_t switch_dclick_mode_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-
-	return sprintf(buf, "%d \n", fts_data->dclick_mode_eable);
-}
-
-static ssize_t switch_game_mode_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
-{
-	int tmp = 0;
-
-	tmp = buf[0] - 48;
-
-	if (tmp == 0) {
-
-		fts_data->game_mode_eable = 0;
-
-		printk("[Focal][Touch] game_mode_disable ! \n");
-
-	} else if (tmp == 1) {
-
-		fts_data->game_mode_eable = 1;
-
-		printk("[Focal][Touch] game_mode_enable ! \n");
-	}
-
-	return count;
-
-}
-static ssize_t switch_game_mode_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-
-	return sprintf(buf, "%d \n", fts_data->game_mode_eable);
-}
-
-
-
-static ssize_t switch_swipeup_mode_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
-{
-	int tmp = 0;
-
-	tmp = buf[0] - 48;
-
-	if (tmp == 0) {
-
-		fts_data->swipeup_mode_eable = 0;
-
-		printk("[Focal][Touch] swipeup_mode_disable ! \n");
-
-	} else if (tmp == 1) {
-
-		fts_data->swipeup_mode_eable = 1;
-
-		printk("[Focal][Touch] swipeup_mode_enable ! \n");
-	}
-
-	return count;
-
-}
-
-static ssize_t switch_swipeup_mode_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-
-	return sprintf(buf, "%d \n", fts_data->swipeup_mode_eable);
-}
-
-static ssize_t pocket_mode_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-
-	return sprintf(buf, "%d \n", fts_data->pocket_mode_eable);
-}
-
-static ssize_t pocket_mode_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
-{
-	int tmp = 0;
-
-	tmp = buf[0] - 48;
-
-	if (tmp == 0) {
-
-		fts_data->pocket_mode_eable = 0;
-
-		printk("[Focal][Touch] pocket_mode_disable ! \n");
-
-	} else if (tmp == 1) {
-
-		fts_data->pocket_mode_eable = 1;
-
-		printk("[Focal][Touch] pocket_mode_enable ! \n");
-	}
-
-	return count;
-
-}
-//game mode check G 90
-static ssize_t game_mode_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-
-	return sprintf(buf, "%d \n", fts_data->checkG_game_mode_eable);
-}
-
-int fts_enter_game_mode( struct i2c_client *client, int mode)
-{
-    int ret = 0;
-    static u8 buf_addr[2] = { 0 };
-    static u8 buf_value[2] = { 0 };
-    buf_addr[0] = 0x8A; /* game mode control */
-
-    if (mode)
-        buf_value[0] = 0x01;
-    else
-        buf_value[0] = 0x00;
-
-    ret = fts_i2c_write_reg( client, buf_addr[0], buf_value[0]);
-    if (ret < 0) {
-        FTS_ERROR("[Mode]fts_enter_game_mode write value fail");
-    }
-
-    return ret ;
-
-}
-
-
-static ssize_t game_mode_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
-{
-	int tmp = 0;
-	
-
-	tmp = buf[0] - 48;
-
-	if (tmp == 0) {
-		fts_data->checkG_game_mode_eable = 0;
-		fts_enter_game_mode(fts_data->client, false);
-
-		printk("[Focal][Touch] game_mode_disable ! \n");
-
-	} else if (tmp == 1) {
-		fts_data->checkG_game_mode_eable = 2;
-		fts_enter_game_mode(fts_data->client, true);
-
-		printk("[Focal][Touch] game_mode_enable ! \n");
-	}
-
-	return count;
-
-}
-
-//check G sensor in game mode 270 
-static ssize_t checkG_game_mode_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-
-	return sprintf(buf, "%d \n", fts_data->checkG_game_mode_eable);
-}
-int fts_enter_checkG_game_mode( struct i2c_client *client, int mode)
-{
-    int ret = 0;
-    static u8 buf_addr[2] = { 0 };
-    static u8 buf_value[2] = { 0 };
-    buf_addr[0] = 0xB4; /* checkG_game mode 270 control */
-
-    if (mode)
-        buf_value[0] = 0x01;
-    else
-        buf_value[0] = 0x00;
-
-    ret = fts_i2c_write_reg( client, buf_addr[0], buf_value[0]);
-    if (ret < 0) {
-        FTS_ERROR("[Mode]fts_checkG_enter_game_mode write value fail");
-    }
-
-    return ret ;
-
-}
-
-
-static ssize_t checkG_game_mode_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
-{
-	int tmp = 0;
-	
-
-	tmp = buf[0] - 48;
-
-	if (tmp == 0) {
-
-		fts_data->checkG_game_mode_eable = 0;
-		fts_enter_checkG_game_mode(fts_data->client, false);
-
-		printk("[Focal][Touch] checkG_game_mode_disable ! \n");
-
-	} else if (tmp == 1) {
-
-		fts_data->checkG_game_mode_eable = 1;
-		fts_enter_checkG_game_mode(fts_data->client, true);
-
-		printk("[Focal][Touch] checkG_game_mode_enable ! \n");
-	}
-
-	return count;
-
-}
-
-
-static ssize_t switch_gesture_mode_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
-{
-	int tmp = 0;
-	u8 gesturetmp = 0;
-	char gesture_buf[16];
-	char cmpchar = '1';
-
-	memset(gesture_buf, 0, sizeof(gesture_buf));
-	sprintf(gesture_buf, "%s", buf);
-	gesture_buf[count-1] = '\0';
-
-	pr_err("[Focal][Touch] gesture_mode_store %s ! \n", gesture_buf);
-
-	if (gesture_buf[0] == cmpchar) {
-		fts_data->gesture_mode_eable = true;
-		printk("[Focal][Touch] gesture_mode enable ! \n");
-	} else
-		fts_data->gesture_mode_eable = false;
-
-	if (fts_data->gesture_mode_eable == 1) {
-
-		for (tmp = 0; tmp < 7; tmp++) {
-			if (gesture_buf[tmp] == cmpchar) {
-				gesturetmp |= (1 << tmp);
-			}
-		}
-
-		fts_data->gesture_mode_type = gesturetmp;
-
-		if ((fts_data->gesture_mode_type & 1 << 6))
-			FTS_gesture_register_d6 = 0x11;
-		else
-			FTS_gesture_register_d6 = 0x01;
-
-		if ((fts_data->gesture_mode_type & 1 << 5))
-			FTS_gesture_register_d7 = 0x20;
-		else
-			FTS_gesture_register_d7 = 0x0;
-
-		if ((fts_data->gesture_mode_type & 1 << 4))
-			FTS_gesture_register_d2 |= 0x10;
-		else
-			FTS_gesture_register_d2 &= 0xef;
-
-		if ((fts_data->gesture_mode_type & 1 << 3))
-			FTS_gesture_register_d2 |= 0x08;
-		else
-			FTS_gesture_register_d2 &= 0xf7;
-
-		if ((fts_data->gesture_mode_type & 1 << 2))
-			FTS_gesture_register_d5 |= 0x40;
-		else
-			FTS_gesture_register_d5 &= 0xbf;
-
-		if ((fts_data->gesture_mode_type & 1 << 1))
-			FTS_gesture_register_d2 |= 0x02;
-		else
-			FTS_gesture_register_d2 &= 0xfd;
-
-		printk("[Focal][Touch] gesture_mode_enable type = %x ! \n", fts_data->gesture_mode_type);
-
-	} else {
-
-		fts_data->gesture_mode_eable = 0;
-
-		fts_data->gesture_mode_type = 0;
-
-		FTS_gesture_register_d2 = 0;
-
-		FTS_gesture_register_d6 = 0;
-
-		FTS_gesture_register_d7 = 0;
-
-		printk("[Focal][Touch] gesture_mode_disable ! \n");
-		}
-
-	return count;
-
-}
-static ssize_t switch_gesture_mode_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	bool tmp = 0;
-
-	tmp = (fts_data->gesture_mode_type >> 6) & 1;
-
-	if (!tmp)
-		return sprintf(buf, "%x \n", tmp);
-	else
-		return sprintf(buf, "%x \n", fts_data->gesture_mode_type);
-
-}
 
 /*****************************************************************************
 *   Name: fts_gesture_recovery
@@ -813,96 +442,8 @@ int fts_gesture_suspend(struct i2c_client *client)
         FTS_INFO("gesture is disabled");
         return -EINVAL;
     }
-	fts_gesture_data.mode = 1;
-	fts_i2c_write_reg(client, FTS_REG_GESTURE_EN, 0x01);
-			if (fts_data->gesture_mode_eable == 1) {
-				pr_err("[Focal][Touch] %s : open zenmotion mode =1 \n", __func__);
-				if (fts_data->dclick_mode_eable == 1){
-					if (fts_data->swipeup_mode_eable == 1){  
-						FTS_gesture_register_d1 = 0x34;
-						pr_err("[Focal][Touch] %s : open dclick and swipe mode d1= 34 \n", __func__);
-					}else{
-						FTS_gesture_register_d1 = 0x30;
-						pr_err("[Focal][Touch] %s : open dclick and disable swipe mode d1= 30 \n", __func__);
-						}
-				}else if (fts_data->swipeup_mode_eable == 1){
-						FTS_gesture_register_d1 = 0x24;
-						pr_err("[Focal][Touch] %s : open swipe mode and disable dclick mode d1= 24 \n", __func__);
-				}else{
-					FTS_gesture_register_d1 = 0x20;
-					pr_err("[Focal][Touch] %s : only open gesture mode d1= 20 \n", __func__);
-				}			
-			}else{
-				pr_err("[Focal][Touch] %s : disable gesture mode ", __func__);
-				if (fts_data->dclick_mode_eable == 1) {
-					if(fts_data->swipeup_mode_eable == 1){
-						pr_err("[Focal][Touch] %s : open dclick and swipe mode d1= 14 \n", __func__);
-						FTS_gesture_register_d1 = 0x14;
-					}else{
-						FTS_gesture_register_d1 = 0x10;
-						pr_err("[Focal][Touch] %s : open dclick mode and disable swipe mode d1= 10 \n", __func__);
-						}
-				}else{
-					if(fts_data->swipeup_mode_eable == 1){
-						pr_err("[Focal][Touch] %s : disable  dclick and open swipe mode d1= 04 \n", __func__);
-						FTS_gesture_register_d1 = 0x04;
-						}
-					}
-				}		
-				for (i = 0; i < 5; i++)
-   		 		{
-   		 			state=fts_i2c_write_reg(client, 0xd1, FTS_gesture_register_d1);
-					if (state <0){
-						msleep(1);
-						pr_err("[FTS][tocuh] write d1 fail %d times \n",i);
-					}
-       				else
-            			break;
-				}
-				pr_err("[Focal][Touch] %s : open gesture mode d2 = %x d5 = %x d6 = %x d7 = %x \n",
-					__func__, FTS_gesture_register_d2, FTS_gesture_register_d5, FTS_gesture_register_d6, FTS_gesture_register_d7);
 
-				for (i = 0; i < 5; i++)
-   		 		{
-   		 			state=fts_i2c_write_reg(client, 0xd2, FTS_gesture_register_d2);
-					if (state <0){
-						msleep(1);
-						pr_err("[FTS][tocuh] write d2 fail %d times \n",i);
-					}
-       				else
-            			break;
-				}
-				for (i = 0; i < 5; i++)
-   		 		{
-   		 			state=fts_i2c_write_reg(client, 0xd5, FTS_gesture_register_d5);
-					if (state <0){
-						msleep(1);
-						pr_err("[FTS][tocuh] write d5 fail %d times \n",i);
-					}
-       				else
-            			break;
-				}
-				for (i = 0; i < 5; i++)
-   		 		{
-   		 			state=fts_i2c_write_reg(client, 0xd6, FTS_gesture_register_d6);
-					if (state <0){
-						msleep(1);
-						pr_err("[FTS][tocuh] write d6 fail %d times \n",i);
-					}
-       				else
-            			break;
-				}
-				for (i = 0; i < 5; i++)
-   		 		{
-   		 			state=fts_i2c_write_reg(client, 0xd7, FTS_gesture_register_d7);
-					if (state <0){
-						msleep(1);
-						pr_err("[FTS][tocuh] write d7 fail %d times \n",i);
-					}
-       				else
-            			break;
-				}	
-   /* for (i = 0; i < 5; i++) {
+    for (i = 0; i < 5; i++) {
         fts_i2c_write_reg(client, 0xd1, 0xff);
         fts_i2c_write_reg(client, 0xd2, 0xff);
         fts_i2c_write_reg(client, 0xd5, 0xff);
@@ -921,7 +462,7 @@ int fts_gesture_suspend(struct i2c_client *client)
         fts_gesture_data.active = DISABLE;
         return -EIO;
     }
-*/
+
     ret = enable_irq_wake(fts_data->irq);
     if (ret) {
         FTS_INFO("enable_irq_wake(irq:%d) failed", fts_data->irq);

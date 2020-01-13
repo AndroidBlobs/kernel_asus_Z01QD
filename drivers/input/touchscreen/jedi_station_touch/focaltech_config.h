@@ -123,7 +123,7 @@
  * Gesture function enable
  * default: disable
  */
-#define FTS_GESTURE_EN                          1
+#define FTS_GESTURE_EN                          0
 
 /*
  * ESD check & protection
@@ -146,12 +146,12 @@
  * cover enable
  * 1: enable, 0:disable(default)
  */
-#define FTS_COVER_EN                            1
+#define FTS_COVER_EN                            0
 /*
  * Charger enable
  * 1: enable, 0:disable(default)
  */
-#define FTS_CHARGER_EN                          1
+#define FTS_CHARGER_EN                          0
 
 /*
  * Nodes for tools, please keep enable
@@ -210,7 +210,7 @@
  * define your own fw_file, the sample one to be replaced is invalid
  * NOTE: if FTS_GET_VENDOR_ID_NUM > 1, it's the fw corresponding with FTS_VENDOR_ID
  */
-#define FTS_UPGRADE_FW_FILE                      "include/firmware/ASUS_JEDI_V0x4A_app.i"
+#define FTS_UPGRADE_FW_FILE                      "include/firmware/ASUS_JEDI_V0x04_app.i"
 
 /*
  * if FTS_GET_VENDOR_ID_NUM >= 2, fw corrsponding with FTS_VENDOR_ID2

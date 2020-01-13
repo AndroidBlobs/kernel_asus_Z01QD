@@ -48,23 +48,22 @@
 #define PROC_SET_TEST_FLAG                      8
 #define PROC_SET_SLAVE_ADDR                     10
 #define PROC_HW_RESET                           11
-#define PROC_NAME                               "ftxxxx-debug"
+#define PROC_NAME                               "ftxxxx_station-debug"
 #define PROC_WRITE_BUF_SIZE                     256
 #define PROC_READ_BUF_SIZE                      256
 
 /*****************************************************************************
 * Private enumerations, structures and unions using typedef
 *****************************************************************************/
-extern int focal_init_success;
-extern void ftxxxx_disable_touch(bool flag);
-extern bool disable_tp_flag;
-extern bool report_touch_log;
-extern void ftxxxx_report_touch(bool flag);
-extern void airtrigger_touch(bool flag);
-extern bool airtrigger_tp_flag;
-extern u16 airtrigger_x;
-extern u16 airtrigger_y;
-extern int finger_R;
+extern int focal_station_init_success;
+extern void ftxxxx_disable_station_touch(bool flag);
+extern bool disable_station_tp_flag;
+extern void airtrigger_station_touch(bool flag);
+extern bool airtrigger_station_tp_flag;
+extern u16 airtrigger_station_x;
+extern u16 airtrigger_station_y;
+extern int finger_station_R;
+extern uint8_t gDongleType;
 
 /*****************************************************************************
 * Static variables
@@ -486,7 +485,10 @@ static ssize_t fts_hw_reset_show(struct device *dev, struct device_attribute *at
 {
     struct input_dev *input_dev = fts_data->input_dev;
     ssize_t count = 0;
-
+	if (focal_station_init_success == 0){
+		printk("[fts][station]%s station touch init= %d, prob fail \n ",__func__,focal_station_init_success);
+		return 0;
+	}
     mutex_lock(&input_dev->mutex);
     fts_reset_proc(1);
     count = snprintf(buf, PAGE_SIZE, "hw reset executed\n");
@@ -503,13 +505,13 @@ static ssize_t disable_touch_store(struct device *dev, struct device_attribute *
 
 	if (tmp == 0) {
 
-		ftxxxx_disable_touch(true);
+		ftxxxx_disable_station_touch(true);
 
 	//	fts_wq_data->pdata->reset_pin_status = 0;
 
 	} else if (tmp == 1) {
 
-		ftxxxx_disable_touch(false);
+		ftxxxx_disable_station_touch(false);
 
 	//	fts_wq_data->pdata->reset_pin_status = 1;
 
@@ -523,48 +525,13 @@ static ssize_t disable_touch_show(struct device *dev, struct device_attribute *a
 {
 	bool stat = 0;
 
-	if (!disable_tp_flag)
+	if (!disable_station_tp_flag)
 		stat = true;
 	else
 		stat = false;
 
 	return sprintf(buf, "%d", stat);
 }
-
-static ssize_t report_touch_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
-{
-	int tmp = 0;
-
-	tmp = buf[0] - 48;
-
-	if (tmp == 0) {
-
-		ftxxxx_report_touch(false);
-
-	} else if (tmp == 1) {
-
-		ftxxxx_report_touch(true);
-
-	}
-
-	return count;
-
-}
-
-static ssize_t report_touch_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	bool stat = 0;
-
-	if (report_touch_log)
-		stat = true;
-	else
-		stat = false;
-
-	return sprintf(buf, "%d", stat);
-}
-
-
-
 
 
 /*
@@ -573,7 +540,10 @@ static ssize_t report_touch_show(struct device *dev, struct device_attribute *at
 static ssize_t fts_irq_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
     struct input_dev *input_dev = fts_data->input_dev;
-
+	if (focal_station_init_success == 0){
+		printk("[fts][station]%s station touch init= %d, prob fail \n ",__func__,focal_station_init_success);
+		return 0;
+	}
     mutex_lock(&input_dev->mutex);
     if (FTS_SYSFS_ECHO_ON(buf)) {
         FTS_INFO("[EX-FUN]enable irq");
@@ -593,7 +563,7 @@ static ssize_t fts_irq_show(struct device *dev, struct device_attribute *attr, c
 static ssize_t fts_init_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 
-	return sprintf(buf, "%d\n", focal_init_success);
+	return sprintf(buf, "%d\n", focal_station_init_success);
 }
 
 /*
@@ -606,28 +576,30 @@ static ssize_t fts_tpfwver_show(struct device *dev, struct device_attribute *att
     struct i2c_client *client = ts_data->client;
     ssize_t num_read_chars = 0;
     u8 fwver = 0;
-    u8 tpid = 0;
-    
+	if (focal_station_init_success == 0){
+		printk("[fts][station]%s station touch init= %d, prob fail \n ",__func__,focal_station_init_success);
+		num_read_chars = snprintf(buf, PAGE_SIZE, "version_wrong\n");
+		return num_read_chars;
+	}
     mutex_lock(&input_dev->mutex);
 
 #if FTS_ESDCHECK_EN
     fts_esdcheck_proc_busy(1);
 #endif
     if (fts_i2c_read_reg(client, FTS_REG_FW_VER, &fwver) < 0) {
-        num_read_chars = snprintf(buf, PAGE_SIZE, "I2c transfer error!\n");
-    }
-
-    if (fts_i2c_read_reg(client, FTS_REG_VENDOR_ID, &tpid) < 0){
-        num_read_chars = snprintf(buf, PAGE_SIZE, "I2c transfer error!\n");
+        num_read_chars = snprintf(buf, PAGE_SIZE, "i2c_error\n");
     }
 #if FTS_ESDCHECK_EN
     fts_esdcheck_proc_busy(0);
 #endif
     if ((fwver == 0xFF) || (fwver == 0x00))
-        num_read_chars = snprintf(buf, PAGE_SIZE, "get tp fw version fail!\n");
-    else
-        num_read_chars = snprintf(buf, PAGE_SIZE, "0x%x-0x%x\n",tpid, fwver);
+        num_read_chars = snprintf(buf, PAGE_SIZE, "version_wrong\n");
+    else if (fwver == 0xEF)
+		num_read_chars = snprintf(buf, PAGE_SIZE, "01\n");
+	else
+        num_read_chars = snprintf(buf, PAGE_SIZE, "%02x\n", fwver);
 
+    FTS_INFO("FW VER:%02x", fwver);
     mutex_unlock(&input_dev->mutex);
     return num_read_chars;
 }
@@ -649,7 +621,10 @@ static ssize_t fts_tprwreg_show(struct device *dev, struct device_attribute *att
     int count;
     int i;
     struct input_dev *input_dev = fts_data->input_dev;
-
+	if (focal_station_init_success == 0){
+		printk("[fts][station]%s station touch init= %d, prob fail \n ",__func__,focal_station_init_success);
+		return 0;
+	}
     mutex_lock(&input_dev->mutex);
 
     if (rw_op.len < 0) {
@@ -823,7 +798,7 @@ static int fts_parse_buf(const char *buf, size_t cmd_len)
 }
 
 
-static ssize_t airtrigger_touch_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t airtrigger_station_touch_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct input_dev *input_dev = fts_data->input_dev;
     ssize_t cmd_length = 0;
@@ -832,10 +807,13 @@ static ssize_t airtrigger_touch_store(struct device *dev, struct device_attribut
 	int finger =0 ;
 	tmp = buf[0] - 48;
 	finger = buf[1]-48;
-	
+	if (focal_station_init_success == 0){
+		printk("[fts][station]%s station touch init= %d, prob fail \n ",__func__,focal_station_init_success);
+		return -EINVAL;
+	}
     mutex_lock(&input_dev->mutex);
     cmd_length = count - 1;
-    FTS_DEBUG("cmd len: %d, buf: %s", (int)cmd_length, buf);	
+    FTS_DEBUG("FTS AT cmd len: %d, buf: %s", (int)cmd_length, buf);	
 	/*if (finger == 0){
 		finger_R = 9;
 		FTS_DEBUG("airtriger R1 ,finger =%d", finger_R);
@@ -848,48 +826,50 @@ static ssize_t airtrigger_touch_store(struct device *dev, struct device_attribut
 		return -EINVAL;
 	}*/
 	if (tmp == 0) {
-		finger_R = 9;
+		finger_station_R = 9;
 		if (18 == cmd_length) {
-			airtrigger_touch(false);
+			airtrigger_station_touch(false);
+            FTS_DEBUG("FTS station L1 up");
 		}else{
 			FTS_ERROR("Invalid cmd buffer");
 			mutex_unlock(&input_dev->mutex);
 			return -EINVAL;
 		}		
 	} else if (tmp == 1) {
-			finger_R = 9;
+			finger_station_R = 9;
 		 	if (18 == cmd_length) {
-			airtrigger_x = shex_to_u16(buf + 2, 4);
-        	airtrigger_y = shex_to_u16(buf + 6, 4);   
-			FTS_DEBUG("airtrigger_X: %d, airtrigger_Y: %d", airtrigger_x, airtrigger_y);
+			airtrigger_station_x = shex_to_u16(buf + 2, 4);
+        	airtrigger_station_y = shex_to_u16(buf + 6, 4);   
+			FTS_DEBUG("FTS station airtrigger_X: %d, airtrigger_Y: %d", airtrigger_station_x, airtrigger_station_y);
     		} else  {
         	FTS_ERROR("Invalid cmd buffer");
         	mutex_unlock(&input_dev->mutex);
         	return -EINVAL;
     	} 
-		airtrigger_touch(true);
+		airtrigger_station_touch(true);
 	}
 	if (finger == 0) {
-		finger_R = 8;
+		finger_station_R = 8;
 		if (18 == cmd_length) {
-			airtrigger_touch(false);
+			airtrigger_station_touch(false);
+            FTS_DEBUG("FTS station R1 up");
 		}else{
 			FTS_ERROR("Invalid cmd buffer");
 			mutex_unlock(&input_dev->mutex);
 			return -EINVAL;
 		}		
 	} else if (finger == 1) {
-			finger_R = 8;
+			finger_station_R = 8;
 		 	if (18 == cmd_length) {
-			airtrigger_x = shex_to_u16(buf + 10, 4);
-        	airtrigger_y = shex_to_u16(buf + 14, 4);   
-			FTS_DEBUG("airtrigger_X: %d, airtrigger_Y: %d", airtrigger_x, airtrigger_y);
+			airtrigger_station_x = shex_to_u16(buf + 10, 4);
+        	airtrigger_station_y = shex_to_u16(buf + 14, 4);   
+			FTS_DEBUG("FTS station R1 airtrigger_X: %d, airtrigger_Y: %d", airtrigger_station_x, airtrigger_station_y);
     		} else  {
-        	FTS_ERROR("Invalid cmd buffer");
+        	FTS_ERROR("FTS statin Invalid cmd buffer");
         	mutex_unlock(&input_dev->mutex);
         	return -EINVAL;
     	} 
-		airtrigger_touch(true);
+		airtrigger_station_touch(true);
 	}
 	mutex_unlock(&input_dev->mutex);
 
@@ -897,11 +877,11 @@ static ssize_t airtrigger_touch_store(struct device *dev, struct device_attribut
 
 }
 
-static ssize_t airtrigger_touch_show(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t airtrigger_station_touch_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	bool stat = 0;
 
-	if (airtrigger_tp_flag)
+	if (airtrigger_station_tp_flag)
 		stat = true;
 	else
 		stat = false;
@@ -921,7 +901,10 @@ static ssize_t fts_tprwreg_store(struct device *dev, struct device_attribute *at
     struct input_dev *input_dev = fts_data->input_dev;
     struct i2c_client *client = container_of(dev, struct i2c_client, dev);
     ssize_t cmd_length = 0;
-
+	if (focal_station_init_success == 0){
+		printk("[fts][station]%s station touch init= %d, prob fail \n ",__func__,focal_station_init_success);
+		return 0;
+	}
     mutex_lock(&input_dev->mutex);
     cmd_length = count - 1;
 
@@ -1019,7 +1002,6 @@ static ssize_t fts_fwupgradebin_store(struct device *dev, struct device_attribut
     struct fts_ts_data *ts_data = fts_data;
     struct input_dev *input_dev = ts_data->input_dev;
     struct i2c_client *client = ts_data->client;
-
     if ((count <= 1) || (count >= FILE_NAME_LENGTH - 32)) {
         FTS_ERROR("fw bin name's length(%d) fail", (int)count);
         return -EINVAL;
@@ -1029,6 +1011,10 @@ static ssize_t fts_fwupgradebin_store(struct device *dev, struct device_attribut
     fwname[count - 1] = '\0';
 
     FTS_INFO("upgrade with bin file through sysfs node");
+	if (focal_station_init_success == 0){
+		printk("[fts][station]%s station touch init= %d, prob fail \n ",__func__,focal_station_init_success);
+		return 0;
+	}
     mutex_lock(&input_dev->mutex);
     ts_data->fw_loading = 1;
     fts_irq_disable();
@@ -1072,6 +1058,10 @@ static ssize_t fts_fwforceupg_store(struct device *dev, struct device_attribute 
     fwname[count - 1] = '\0';
 
     FTS_INFO("force upgrade through sysfs node");
+	if (focal_station_init_success == 0){
+		printk("[fts][station]%s station touch init= %d, prob fail \n ",__func__,focal_station_init_success);
+		return 0;
+	}
     mutex_lock(&input_dev->mutex);
     ts_data->fw_loading = 1;
     fts_irq_disable();
@@ -1098,7 +1088,10 @@ static ssize_t fts_driverversion_show(struct device *dev, struct device_attribut
 {
     int count;
     struct input_dev *input_dev = fts_data->input_dev;
-
+	if (focal_station_init_success == 0){
+		printk("[fts][station]%s station touch init= %d, prob fail \n ",__func__,focal_station_init_success);
+		return 0;
+	}
     mutex_lock(&input_dev->mutex);
     count = snprintf(buf, PAGE_SIZE, FTS_DRIVER_VERSION "\n");
     mutex_unlock(&input_dev->mutex);
@@ -1196,11 +1189,7 @@ static DEVICE_ATTR(fts_hw_reset, S_IRUGO | S_IWUSR, fts_hw_reset_show, fts_hw_re
 static DEVICE_ATTR(fts_irq, S_IRUGO | S_IWUSR, fts_irq_show, fts_irq_store);
 static DEVICE_ATTR(ftinitstatus, S_IRUGO | S_IWUSR, fts_init_show, NULL);
 static DEVICE_ATTR(disable_touch, S_IRUGO|S_IWUSR, disable_touch_show, disable_touch_store);
-static DEVICE_ATTR(airtrigger_touch, S_IRUGO|S_IWUSR, airtrigger_touch_show, airtrigger_touch_store);
-
-static DEVICE_ATTR(report_touch,S_IRUGO|S_IWUSR, report_touch_show, report_touch_store);
-
-
+static DEVICE_ATTR(airtrigger_station_touch, S_IRUGO|S_IWUSR, airtrigger_station_touch_show, airtrigger_station_touch_store);
 
 
 /* add your attr in here*/
@@ -1215,8 +1204,7 @@ static struct attribute *fts_attributes[] = {
     &dev_attr_fts_irq.attr,
     &dev_attr_ftinitstatus.attr,
     &dev_attr_disable_touch.attr,
-    &dev_attr_airtrigger_touch.attr,
-    &dev_attr_report_touch.attr,
+    &dev_attr_airtrigger_station_touch.attr,
     NULL
 };
 

@@ -15,7 +15,7 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 
-int msm_show_resume_irq_mask;
+int msm_show_resume_irq_mask=1; /*[PM]This flag is used to print "irq_number" during pm_system_irq_wakeup() in kerneldrivers/base/power/wakeup.c */
 
 module_param_named(
 	debug_mask, msm_show_resume_irq_mask, int, S_IRUGO | S_IWUSR | S_IWGRP

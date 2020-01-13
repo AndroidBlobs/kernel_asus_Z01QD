@@ -1579,7 +1579,7 @@ int wmi_pcp_start(struct wil6210_priv *wil, int bi, u8 wmi_nettype,
 
 	if ((cmd.pcp_max_assoc_sta > WIL6210_MAX_CID) ||
 	    (cmd.pcp_max_assoc_sta <= 0)) {
-		wil_info(wil,
+		wil_err(wil,
 			 "Requested connection limit %u, valid values are 1 - %d. Setting to %d\n",
 			 max_assoc_sta, WIL6210_MAX_CID, WIL6210_MAX_CID);
 		cmd.pcp_max_assoc_sta = WIL6210_MAX_CID;

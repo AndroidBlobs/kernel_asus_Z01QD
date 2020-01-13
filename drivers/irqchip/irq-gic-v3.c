@@ -703,6 +703,9 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 	u32 pending[32];
 	void __iomem *base = gic_data.dist_base;
 
+/*ASUS_BSP Freddy++ zs600kl will not use this function*/
+        return;
+
 	if (!msm_show_resume_irq_mask)
 		return;
 

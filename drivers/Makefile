@@ -178,4 +178,30 @@ obj-$(CONFIG_NVMEM)		+= nvmem/
 obj-$(CONFIG_ESOC)              += esoc/
 obj-$(CONFIG_FPGA)		+= fpga/
 obj-$(CONFIG_SENSORS_SSC)		+= sensors/
+# ASUS_BSP : fan control driver
+obj-y				+= fan/
 obj-$(CONFIG_TEE)		+= tee/
+
+# ASUS_BSP Deeo : AURA SYNC driver
+obj-y				+= aura_sync/
+# ASUS_BSP Deeo : JEDI Dongle driver
+obj-y				+= ec_hid_driver/
+# ASUS_BSP Deeo : DT power control
+obj-y				+= dt_power/
+
+#ASUS_BSP_Display
+obj-y				+= pixelworks/
+
+#Texura
+ifdef CONFIG_TEXURA_USERDEBUG
+	obj-y				+= ntfs/userdebug/
+	obj-y				+= exfat/userdebug/
+else
+	obj-y				+= ntfs/user/
+	obj-y				+= exfat/user/
+endif
+
+#ASUS_BSP_Vibrator +++, mark_guo
+obj-$(CONFIG_SND_SOC_TAS2560)		+= motor/tas2560sw-haptics/
+obj-$(CONFIG_TSPDRV)		+= motor/tspdrv/
+#ASUS_BSP_Vibrator ---

@@ -110,6 +110,9 @@ static atomic_t shift_adj = ATOMIC_INIT(0);
 static short adj_max_shift = 353;
 module_param_named(adj_max_shift, adj_max_shift, short, 0644);
 
+unsigned long time_out;
+
+
 /* User knob to enable/disable adaptive lmk feature */
 static int enable_adaptive_lmk;
 module_param_named(enable_adaptive_lmk, enable_adaptive_lmk, int, 0644);
@@ -433,7 +436,11 @@ void tune_lmk_param(int *other_free, int *other_file, struct shrink_control *sc)
 			     "%d\n", *other_free, *other_file);
 	}
 }
-
+#define ASUS_MEMORY_DEBUG_MAXLEN    (128)
+#define ASUS_MEMORY_DEBUG_MAXCOUNT  (256)
+#define MINFREE_TO_PRINT_LOG 		(200)
+#define HEAD_LINE "PID       RSS    oom_adj       cmdline\n"
+char meminfo_str[ASUS_MEMORY_DEBUG_MAXCOUNT][ASUS_MEMORY_DEBUG_MAXLEN];
 static void mark_lmk_victim(struct task_struct *tsk)
 {
 	struct mm_struct *mm = tsk->mm;
@@ -451,6 +458,7 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 	unsigned long rem = 0;
 	int tasksize;
 	int i;
+	int meminfo_str_index = 0;
 	int ret = 0;
 	short min_score_adj = OOM_SCORE_ADJ_MAX + 1;
 	int minfree = 0;
@@ -549,6 +557,17 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 		}
 
 		oom_score_adj = p->signal->oom_score_adj;
+		//save the memory inforation if the oomadj is lower than MINFREE_TO_PRINT_LOG(300) for showing
+		if(min_score_adj <= MINFREE_TO_PRINT_LOG)
+		{
+			tasksize = get_mm_rss(p->mm);
+			if(meminfo_str_index >= ASUS_MEMORY_DEBUG_MAXCOUNT )
+				meminfo_str_index = ASUS_MEMORY_DEBUG_MAXCOUNT - 1;
+			snprintf(meminfo_str[meminfo_str_index++], ASUS_MEMORY_DEBUG_MAXLEN, "%6d  %8ldkB %8d %s\n", p->pid, tasksize * (long)(PAGE_SIZE / 1024),oom_score_adj, p->comm);
+
+		}
+
+
 		if (oom_score_adj < min_score_adj) {
 			task_unlock(p);
 			continue;
@@ -558,10 +577,7 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 		if (tasksize <= 0)
 			continue;
 		if (selected) {
-			if (oom_score_adj < selected_oom_score_adj)
-				continue;
-			if (oom_score_adj == selected_oom_score_adj &&
-			    tasksize <= selected_tasksize)
+			if (tasksize <= selected_tasksize)
 				continue;
 		}
 		selected = p;
@@ -644,6 +660,15 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 	lowmem_print(4, "lowmem_scan %lu, %x, return %lu\n",
 		     sc->nr_to_scan, sc->gfp_mask, rem);
 	mutex_unlock(&scan_mutex);
+	if(selected && (min_score_adj <= MINFREE_TO_PRINT_LOG) && time_after(jiffies,time_out)){
+			int count = 0;
+			printk(HEAD_LINE);
+			while (count < meminfo_str_index ){
+				printk(meminfo_str[count]);
+				count++;
+			}
+			time_out = jiffies + HZ * 10;
+	}
 	return rem;
 }
 

@@ -555,6 +555,7 @@ static int corsair_probe(struct hid_device *dev, const struct hid_device_id *id)
 	struct corsair_drvdata *drvdata;
 	struct usb_interface *usbif = to_usb_interface(dev->dev.parent);
 
+	pr_info("[USB] %s +++\n", __func__);
 	drvdata = devm_kzalloc(&dev->dev, sizeof(struct corsair_drvdata),
 			       GFP_KERNEL);
 	if (drvdata == NULL)
@@ -586,6 +587,7 @@ static int corsair_probe(struct hid_device *dev, const struct hid_device_id *id)
 		}
 	}
 
+	pr_info("[USB] %s ---\n", __func__);
 	return 0;
 }
 
@@ -698,6 +700,7 @@ static __u8 *corsair_mouse_report_fixup(struct hid_device *hdev, __u8 *rdesc,
 		 * instead (Logical Minimum)
 		 */
 		switch (hdev->product) {
+		case USB_DEVICE_ID_CORSAIR_GLAIVE_RGB:
 		case USB_DEVICE_ID_CORSAIR_SCIMITAR_PRO_RGB:
 			if (*rsize >= 172 && rdesc[75] == 0x15 && rdesc[77] == 0x16
 			&& rdesc[78] == 0xff && rdesc[79] == 0x0f) {
@@ -715,6 +718,8 @@ static const struct hid_device_id corsair_devices[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_CORSAIR, USB_DEVICE_ID_CORSAIR_K90),
 		.driver_data = CORSAIR_USE_K90_MACRO |
 			       CORSAIR_USE_K90_BACKLIGHT },
+	{ HID_USB_DEVICE(USB_VENDOR_ID_CORSAIR,
+            USB_DEVICE_ID_CORSAIR_GLAIVE_RGB) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_CORSAIR,
             USB_DEVICE_ID_CORSAIR_SCIMITAR_PRO_RGB) },
 	{}

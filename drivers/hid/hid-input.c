@@ -36,6 +36,9 @@
 
 #define unk	KEY_UNKNOWN
 
+extern int data0;
+extern int data1;
+
 static const unsigned char hid_keyboard[256] = {
 	  0,  0,  0,  0, 30, 48, 46, 32, 18, 33, 34, 35, 23, 36, 37, 38,
 	 50, 49, 24, 25, 16, 19, 31, 20, 22, 47, 17, 45, 21, 44,  2,  3,
@@ -1192,6 +1195,33 @@ void hidinput_hid_event(struct hid_device *hid, struct hid_field *field, struct 
 	if (usage->type == EV_KEY &&
 	    (!test_bit(usage->code, input->key)) == value)
 		input_event(input, EV_MSC, MSC_SCAN, usage->hid);
+
+	//Left CTRL
+	if (data0 == 4 && data1 == 1){
+		usage->code = 0x1d;
+	}
+	//Left ALT
+	else if (data0 == 4 && data1 == 4){
+		usage->code = 0x38;
+	}
+	//Left SHIFT
+	else if (data0 == 4 && data1 == 2){
+		usage->code = 0x2a;
+	}
+	//Right CTRL
+	else if (data0 == 4 && data1 == 16){
+		usage->code = 0x61;
+	}
+	//Right ALT
+	else if (data0 == 4 && data1 == 64){
+		usage->code = 0x64;
+	}
+	//Right SHIFT
+	else if (data0 == 4 && data1 == 32){
+		usage->code = 0x36;
+	}
+	data0 = 0;
+	data1 = 0;
 
 	input_event(input, usage->type, usage->code, value);
 

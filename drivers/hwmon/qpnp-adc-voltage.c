@@ -2581,7 +2581,25 @@ static ssize_t qpnp_adc_show(struct device *dev,
 	struct qpnp_vadc_result result;
 	int rc = -1;
 
+	/* ASUS_BSP (Clay_Wang) +++ for ATD parser format */
+	char tempbuf[20]={0};
+	/* ASUS_BSP (Clay_Wang) --- for ATD parser format */
+
 	rc = qpnp_vadc_read(vadc, attr->index, &result);
+
+	/* ASUS_BSP (Clay_Wang) +++ for ATD parser format */
+	sscanf(devattr->attr.name, "%s", tempbuf);
+	if (!strcmp(tempbuf, "asus_pa_therm1") ||
+		!strcmp(tempbuf, "asus_pa_therm2") ||
+	    !strcmp(tempbuf, "PMI8998_quiet_therm") ||
+	    !strcmp(tempbuf, "asus_speaker_therm") ||
+	    !strcmp(tempbuf, "asus_msm_therm") ||
+		!strcmp(tempbuf, "xo_therm") ||
+	    !strcmp(tempbuf, "msm_therm")) {
+	    return snprintf(buf, QPNP_ADC_HWMON_NAME_LENGTH,
+			    "%lld\n", result.physical);
+	}
+	/* ASUS_BSP (Clay_Wang) --- for ATD parser format */
 
 	if (rc) {
 		pr_err("VADC read error with %d\n", rc);

@@ -510,7 +510,7 @@ static struct device_attribute device_attrs[] = {
 	__ATTR(rotate, S_IRUGO|S_IWUSR, show_rotate, store_rotate),
 	__ATTR(state, S_IRUGO|S_IWUSR, show_fbstate, store_fbstate),
 #ifdef CONFIG_FB_BACKLIGHT
-	__ATTR(bl_curve, S_IRUGO|S_IWUSR, show_bl_curve, store_bl_curve),
+	__ATTR(bl_curve, S_IRUGO|S_IWUGO, show_bl_curve, store_bl_curve),
 #endif
 };
 

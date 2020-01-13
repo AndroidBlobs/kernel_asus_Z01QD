@@ -20,7 +20,7 @@
 
 #include <linux/pmic-voter.h>
 
-#define NUM_MAX_CLIENTS		16
+#define NUM_MAX_CLIENTS		20
 #define DEBUG_FORCE_CLIENT	"DEBUG_FORCE_CLIENT"
 
 static DEFINE_SPINLOCK(votable_list_slock);
@@ -370,6 +370,10 @@ int vote(struct votable *votable, const char *client_str, bool enabled, int val)
 	 * to enabled so that the election still works based on
 	 * value regardless of the type
 	 */
+
+	if (strcmp(client_str, "DIRECT_CHARGE_VOTER") == 0) 
+		printk("[BAT][CHG] vote client_id = %d\n", client_id);
+
 	if (votable->type == VOTE_SET_ANY)
 		val = enabled;
 
@@ -432,6 +436,28 @@ int vote(struct votable *votable, const char *client_str, bool enabled, int val)
 	votable->voted_on = true;
 out:
 	unlock_votable(votable);
+	return rc;
+}
+
+/*ASUS BSP charger +++ : for setting ICL*/
+int asus_exclusive_vote(struct votable *votable, const char *client_str, bool enabled, int val)
+{
+	int i;
+	int rc = 0;
+
+	lock_votable(votable);
+	votable->effective_client_id = -EINVAL;
+	votable->effective_result = -EINVAL;
+	for (i = 0; i < votable->num_clients; i++) {
+		if (votable->client_strs[i]) {
+			votable->votes[i].enabled = false;
+			votable->votes[i].value = 0;
+		}
+	}
+	unlock_votable(votable);
+
+	rc = vote(votable, client_str, enabled, val);
+
 	return rc;
 }
 

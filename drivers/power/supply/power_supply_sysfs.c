@@ -49,8 +49,9 @@ static ssize_t power_supply_show_property(struct device *dev,
 		"Wireless", "USB_FLOAT", "BMS", "Parallel", "Main", "Wipower",
 		"TYPEC", "TYPEC_UFP", "TYPEC_DFP"
 	};
-	static char *status_text[] = {
-		"Unknown", "Charging", "Discharging", "Not charging", "Full"
+	static char *status_text[] = {	//ASUS BSP charger +++
+		"Unknown", "Charging", "Discharging", "Not charging", "Full",
+		"Quick charging", "Quick charging plus", "Thermal Alert", "Thermal Alert No Cable"
 	};
 	static char *charge_type[] = {
 		"Unknown", "N/A", "Trickle", "Fast",
@@ -83,10 +84,18 @@ static ssize_t power_supply_show_property(struct device *dev,
 	static const char * const typec_pr_text[] = {
 		"none", "dual power role", "sink", "source"
 	};
+	//[+++]Add the interface for charging debug apk
+	static char *adapter_id_text[] = {
+		"NONE", "ASUS_750K", "ASUS_200K", "PB", "OTHERS", "ADC_NOT_READY"
+	};
+	static char *apsd_result_text[] = {
+		"UNKNOWN", "SDP", "CDP", "DCP", "OCP", "FLOAT", "HVDCP2", "HVDCP3"
+	};
+	//[---]Add the interface for charging debug apk
 	ssize_t ret = 0;
 	struct power_supply *psy = dev_get_drvdata(dev);
 	const ptrdiff_t off = attr - power_supply_attrs;
-	union power_supply_propval value;
+	union power_supply_propval value = {0, };
 
 	if (off == POWER_SUPPLY_PROP_TYPE) {
 		value.intval = psy->desc->type;
@@ -141,6 +150,17 @@ static ssize_t power_supply_show_property(struct device *dev,
 	else if (off >= POWER_SUPPLY_PROP_MODEL_NAME)
 		return scnprintf(buf, PAGE_SIZE, "%s\n",
 				value.strval);
+	//[+++]Add the interface for charging debug apk
+	else if (off == POWER_SUPPLY_PROP_ASUS_ADAPTER_ID)
+		return sprintf(buf, "%s\n", adapter_id_text[value.intval]);
+	else if (off == POWER_SUPPLY_PROP_ASUS_APSD_RESULT)
+		return sprintf(buf, "%s\n", apsd_result_text[value.intval]);
+	//[---]Add the interface for charging debug apk_done
+	else if (off == POWER_SUPPLY_PROP_PD_PORT) {
+		pr_info("[PSY] %s: prop_PD_Port value=%d\n", __func__, value.intval);
+		return scnprintf(buf, PAGE_SIZE, "%d\n",
+				value.intval);
+	}
 
 	if (off == POWER_SUPPLY_PROP_CHARGE_COUNTER_EXT)
 		return scnprintf(buf, PAGE_SIZE, "%lld\n",
@@ -294,6 +314,7 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(typec_power_role),
 	POWER_SUPPLY_ATTR(pd_allowed),
 	POWER_SUPPLY_ATTR(pd_active),
+	POWER_SUPPLY_ATTR(pd2_active),	//ASUS BSP +++
 	POWER_SUPPLY_ATTR(pd_in_hard_reset),
 	POWER_SUPPLY_ATTR(pd_current_max),
 	POWER_SUPPLY_ATTR(pd_usb_suspend_supported),
@@ -342,6 +363,17 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(fcc_stepper_enable),
 	/* Local extensions of type int64_t */
 	POWER_SUPPLY_ATTR(charge_counter_ext),
+	//[+++]Add the interface for charging debug apk
+	POWER_SUPPLY_ATTR(asus_apsd_result),
+	POWER_SUPPLY_ATTR(asus_adapter_id),
+	POWER_SUPPLY_ATTR(asus_is_legacy_cable),
+	POWER_SUPPLY_ATTR(asus_icl_setting),
+	POWER_SUPPLY_ATTR(asus_total_fcc),
+	//[---]Add the interface for charging debug apk
+#ifdef CONFIG_DUAL_PD_PORT
+	POWER_SUPPLY_ATTR(nxp_pd_port),
+	POWER_SUPPLY_ATTR(pd_cap),
+#endif
 	/* Properties of type `const char *' */
 	POWER_SUPPLY_ATTR(model_name),
 	POWER_SUPPLY_ATTR(manufacturer),

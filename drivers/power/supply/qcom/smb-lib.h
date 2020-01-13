@@ -19,6 +19,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/extcon.h>
 #include "storm-watch.h"
+#include <linux/qpnp/qpnp-adc.h>	//ASUS BSP +++
 
 enum print_reason {
 	PR_INTERRUPT	= BIT(0),
@@ -26,6 +27,7 @@ enum print_reason {
 	PR_MISC		= BIT(2),
 	PR_PARALLEL	= BIT(3),
 	PR_OTG		= BIT(4),
+	PR_NXP		= BIT(7),
 };
 
 #define DEFAULT_VOTER			"DEFAULT_VOTER"
@@ -44,6 +46,10 @@ enum print_reason {
 #define THERMAL_DAEMON_VOTER		"THERMAL_DAEMON_VOTER"
 #define CC_DETACHED_VOTER		"CC_DETACHED_VOTER"
 #define HVDCP_TIMEOUT_VOTER		"HVDCP_TIMEOUT_VOTER"
+#ifdef CONFIG_USBPD_PHY_QCOM
+#define DIRECT_CHARGE_VOTER		"DIRECT_CHARGE_VOTER"
+#define PD_DIRECT_CHARGE_VOTER		"PD_DIRECT_CHARGE_VOTER"
+#endif
 #define PD_DISALLOWED_INDIRECT_VOTER	"PD_DISALLOWED_INDIRECT_VOTER"
 #define PD_HARD_RESET_VOTER		"PD_HARD_RESET_VOTER"
 #define VBUS_CC_SHORT_VOTER		"VBUS_CC_SHORT_VOTER"
@@ -73,11 +79,14 @@ enum print_reason {
 #define OV_VOTER			"OV_VOTER"
 #define FG_ESR_VOTER			"FG_ESR_VOTER"
 #define FCC_STEPPER_VOTER		"FCC_STEPPER_VOTER"
+#define ASUS_CHG_VOTER			"ASUS_CHG_VOTER"		//ASUS BSP ADD +++
+#define ASUS_ICL_VOTER			"ASUS_ICL_VOTER"
 
 #define VCONN_MAX_ATTEMPTS	3
 #define OTG_MAX_ATTEMPTS	3
 #define BOOST_BACK_STORM_COUNT	3
 #define WEAK_CHG_STORM_COUNT	8
+#define ASP1690_MUX_WAIT_TIME	0
 
 enum smb_mode {
 	PARALLEL_MASTER = 0,
@@ -155,6 +164,14 @@ struct smb_irq_info {
 static const unsigned int smblib_extcon_cable[] = {
 	EXTCON_USB,
 	EXTCON_USB_HOST,
+//#ifdef CONFIG_USBPD_PHY_QCOM	
+	EXTCON_USB_CC,
+	EXTCON_USB_SPEED,
+//#endif	
+	EXTCON_NONE,
+};
+
+static const unsigned int asus_extcon_cable[] = {
 	EXTCON_NONE,
 };
 
@@ -265,6 +282,7 @@ struct smb_charger {
 	struct power_supply		*usb_psy;
 	struct power_supply		*dc_psy;
 	struct power_supply		*bms_psy;
+	struct power_supply		*pca_psy;
 	struct power_supply_desc	usb_psy_desc;
 	struct power_supply		*usb_main_psy;
 	struct power_supply		*usb_port_psy;
@@ -280,6 +298,7 @@ struct smb_charger {
 	struct smb_regulator	*vbus_vreg;
 	struct smb_regulator	*vconn_vreg;
 	struct regulator	*dpdm_reg;
+	struct regulator	*dpdm2_reg;// This is added for USB2 controller
 
 	/* votables */
 	struct votable		*dc_suspend_votable;
@@ -317,10 +336,43 @@ struct smb_charger {
 	struct delayed_work	uusb_otg_work;
 	struct delayed_work	bb_removal_work;
 
+	/* asus work */
+	struct delayed_work	asus_chg_flow_work;
+	struct delayed_work	asus_adapter_adc_work;
+	struct delayed_work	asus_min_monitor_work;
+	struct delayed_work	asus_usb_alert_work;
+	struct delayed_work	asus_low_impedance_work;
+	struct delayed_work	asus_water_proof_btm_work;
+	struct delayed_work	asus_water_proof_side_work;
+	struct delayed_work	asus_thermal_btm_work;
+	struct delayed_work	asus_thermal_side_work;	
+	struct delayed_work	asus_batt_RTC_work;
+	struct delayed_work	asus_set_flow_flag_work;
+	struct delayed_work	asus_mux_setting_1_work;
+	struct delayed_work	asus_cable_check_work;
+	struct delayed_work	asus_30W_Dual_chg_work;
+	struct delayed_work asus_side_misinsertion_work;
+	struct delayed_work asus_slow_insertion_work;
+	struct delayed_work asus_pogo_thermal_work;
+	struct delayed_work asus_cos_pd_hard_reset_work;
+	struct delayed_work asus_call_rt_reset_work;
+
+	/* asus adc parameters */
+	struct qpnp_vadc_chip	*vadc_dev;
+	struct qpnp_adc_tm_chip *adc_tm_dev;
+	struct qpnp_adc_tm_btm_param	adc_param;
+	struct qpnp_vadc_chip	*vadc_dev_side;
+	struct qpnp_adc_tm_chip *adc_tm_dev_side;
+	struct qpnp_adc_tm_btm_param	adc_param_side;
+	struct qpnp_vadc_chip	*vadc_dev_temp;
+	struct qpnp_adc_tm_chip *adc_tm_dev_temp;
+	struct qpnp_adc_tm_btm_param	adc_param_temp;
+
 	/* cached status */
 	int			voltage_min_uv;
 	int			voltage_max_uv;
 	int			pd_active;
+	int			pd2_active;
 	bool			system_suspend_supported;
 	int			boost_threshold_ua;
 	int			system_temp_level;
@@ -333,6 +385,9 @@ struct smb_charger {
 	bool			sw_jeita_enabled;
 	bool			is_hdc;
 	bool			chg_done;
+	#ifdef CONFIG_USBPD_PHY_QCOM
+	bool			micro_usb_mode;
+	#endif
 	bool			connector_type;
 	bool			otg_en;
 	bool			vconn_en;
@@ -372,6 +427,14 @@ struct smb_charger {
 
 	/* extcon for VBUS / ID notification to USB for uUSB */
 	struct extcon_dev	*extcon;
+	/* asus extcon */
+	struct extcon_dev	*thermal_extcon;
+	struct extcon_dev	*water_extcon;
+	struct extcon_dev	*quickchg_extcon;
+	struct extcon_dev	*misinsertion_extcon;
+
+	/* ASUS_BSP Deeo : JEDI dongle */
+	struct extcon_dev	*dongle_type;
 
 	/* battery profile */
 	int			batt_profile_fcc_ua;
@@ -382,6 +445,56 @@ struct smb_charger {
 	int			pulse_cnt;
 
 	int			die_health;
+};
+
+//ASUS BSP : Add gpio control struct +++
+struct gpio_control {
+	u32 POGO_OTG_EN;		//pmi_11
+	u32 BTM_OTG_EN;			//pm_6
+	u32 POGO_DET;			//pmi_10
+	u32 BTM_OVP_ACOK;		//soc_31
+	u32 POGO_OVP_ACOK;		//soc_32
+	u32 POGO_ADC_MUX_INT_N;	//soc_43
+	u32 USB2_MUX1_EN;		//soc_102
+	u32 USB2_MUX2_EN;		//soc_104
+	u32	USB1_MUX_EN;		//pm_2
+	u32 PW_ADC_EN;			//soc_100
+	u32 PMI_MUX_EN;			//pm_10
+	u32 POGO_THML_INT;		//soc 22
+	u32 WP_POGO;			//pm_9
+	u32 WP_BTM;				//pm_12
+};
+//ASUS BSP : Add gpio control struct ---
+
+enum POGO_ID {
+	ERROR1 = 0,
+	NO_INSERT,
+	INBOX,
+	DT,
+	STATION,
+	OTHER,
+};
+
+static char *pogo_id_str[] = {
+	"ERROR",
+	"NO_INSERT",
+	"INBOX",
+	"DT",
+	"STATION",
+	"OTHERS"
+};
+
+enum QC_BATT_STATUS {
+	NORMAL = 0,
+	QC,
+	QC_PLUS,
+};
+
+enum NXP_VID {
+	NXP_NONE = 0,
+	NXP_SIDE,
+	NXP_BTM,
+	NXP_BOTH,
 };
 
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val);
@@ -495,6 +608,10 @@ int smblib_get_prop_input_current_settled(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_input_voltage_settled(struct smb_charger *chg,
 				union power_supply_propval *val);
+#ifdef CONFIG_USBPD_PHY_QCOM
+int smblib_get_prop_charging_enabled(struct smb_charger *chg,
+				union power_supply_propval *val);
+#endif
 int smblib_get_prop_pd_in_hard_reset(struct smb_charger *chg,
 			       union power_supply_propval *val);
 int smblib_get_pe_start(struct smb_charger *chg,
@@ -509,6 +626,9 @@ int smblib_get_prop_charge_qnovo_enable(struct smb_charger *chg,
 			       union power_supply_propval *val);
 int smblib_set_prop_pd_current_max(struct smb_charger *chg,
 				const union power_supply_propval *val);
+//added by NXP
+int smblib_set_prop_usb_current_max(struct smb_charger *chg,
+				    const union power_supply_propval *val);
 int smblib_set_prop_sdp_current_max(struct smb_charger *chg,
 				const union power_supply_propval *val);
 int smblib_set_prop_pd_voltage_max(struct smb_charger *chg,
@@ -519,7 +639,15 @@ int smblib_set_prop_boost_current(struct smb_charger *chg,
 				const union power_supply_propval *val);
 int smblib_set_prop_typec_power_role(struct smb_charger *chg,
 				const union power_supply_propval *val);
+#ifdef CONFIG_USBPD_PHY_QCOM
+int smblib_set_prop_charging_enabled(struct smb_charger *chg,
+				const union power_supply_propval *val);
+int smblib_set_prop_pd_allowed(struct smb_charger *chg,
+				const union power_supply_propval *val);
+#endif
 int smblib_set_prop_pd_active(struct smb_charger *chg,
+				const union power_supply_propval *val);
+int smblib_set_prop_pd2_active(struct smb_charger *chg,
 				const union power_supply_propval *val);
 int smblib_set_prop_pd_in_hard_reset(struct smb_charger *chg,
 				const union power_supply_propval *val);

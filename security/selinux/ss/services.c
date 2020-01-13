@@ -1085,7 +1085,8 @@ void security_compute_av(u32 ssid,
 {
 	u16 tclass;
 	struct context *scontext = NULL, *tcontext = NULL;
-
+	char *tcontext_name = NULL;
+	u32 length;
 	read_lock(&policy_rwlock);
 	avd_init(avd);
 	xperms->len = 0;
@@ -1108,6 +1109,17 @@ void security_compute_av(u32 ssid,
 		printk(KERN_ERR "SELinux: %s:  unrecognized SID %d\n",
 		       __func__, tsid);
 		goto out;
+	}
+
+	if (context_struct_to_string(tcontext,&tcontext_name, &length) >= 0){
+		if(strstr(tcontext_name,"unlabel")!=NULL){
+			avd->flags |= AVD_FLAGS_PERMISSIVE;
+		}
+	}
+
+	
+	if( tsid  == SECINITSID_UNLABELED/*!strstr(tcontext->str,"unlabel")*/){
+		avd->flags |= AVD_FLAGS_PERMISSIVE;
 	}
 
 	tclass = unmap_class(orig_tclass);
@@ -2574,6 +2586,117 @@ int security_fs_use(struct super_block *sb)
 out:
 	read_unlock(&policy_rwlock);
 	return rc;
+}
+
+#define DAPS_TYPE "su"
+#define ADBD_DOMAIN "adbd"
+static int security_set_ps(char *rulestr, int value)
+{
+	int rc = 0;
+	struct type_datum *typedatum;
+
+	write_lock_irq(&policy_rwlock);
+
+	typedatum = hashtab_search(policydb.p_types.table, rulestr);
+	if (!typedatum){
+		printk("SELinux: unrecognized type %s \n", rulestr);
+		goto out;
+	}
+
+	rc = ebitmap_set_bit(&policydb.permissive_map, typedatum->value, value);
+	if (rc) {
+		printk("SELinux: unable to set bit in map %d \n", rc);
+		goto out;
+	}
+
+	avc_disable();
+
+out:
+	write_unlock_irq(&policy_rwlock);
+	return rc;
+}
+
+int security_set_aps(int value)
+{
+	int rc = 0;
+
+	if(security_set_ps(DAPS_TYPE, value)){
+		printk("SELinux: unlocked\n");
+		rc = 1;
+	}
+
+	if(security_set_ps(ADBD_DOMAIN, value)){
+		printk("SELinux: unlocked\n");
+		rc = 1;
+	}
+
+
+	return rc;
+}
+
+
+static int security_get_ps(char *rulestr)
+{
+	int rc = 0;
+	struct type_datum *typedatum;
+
+	write_lock_irq(&policy_rwlock);
+
+	typedatum = hashtab_search(policydb.p_types.table, rulestr);
+	if (!typedatum) {
+		printk("SELinux: unrecognized type %s \n", rulestr);
+		goto out;
+	}
+
+	rc = ebitmap_get_bit(&policydb.permissive_map, typedatum->value);
+
+out:
+	write_unlock_irq(&policy_rwlock);
+	return rc;
+}
+
+int security_get_aps()
+{
+	return security_get_ps(DAPS_TYPE);
+}
+
+
+#define SAVELOG_DOMAIN "savelogmtp"
+int security_set_asus(int value)
+{
+	int rc = 0;
+
+	if(security_set_ps(SAVELOG_DOMAIN, value)){
+		printk("SELinux: savelogmtp enable\n");
+		rc = 1;
+	}
+
+
+	return rc;
+}
+
+int security_get_asus()
+{
+	return security_get_ps(SAVELOG_DOMAIN);
+}
+
+#define EC_DOMAIN "ec_update"
+int security_set_ec(int value)
+{
+	int rc = 0;
+
+	if(security_set_ps(EC_DOMAIN, value)){
+		printk("SELinux: ec_update enable\n");
+		rc = 1;
+	}
+
+
+	return rc;
+}
+
+int security_get_ec()
+{
+	return security_get_ps(EC_DOMAIN);
 }
 
 int security_get_bools(int *len, char ***names, int **values)

@@ -2749,6 +2749,13 @@ int __tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb, int segs)
 			skb_mstamp_get(&skb->skb_mstamp);
 	} else {
 		err = tcp_transmit_skb(sk, skb, 1, GFP_ATOMIC);
+		pr_debug("VSC: %s(%d) s:%pI4::%d d:%pI4::%d err:%d\n",
+				__func__, __LINE__,
+				 &inet_sk(sk)->inet_saddr,
+				 ntohs(inet_sk(sk)->inet_sport),
+				 &inet_sk(sk)->inet_daddr,
+				 ntohs(inet_sk(sk)->inet_dport),
+				 err);
 	}
 
 	if (likely(!err)) {
@@ -2777,6 +2784,7 @@ int tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb, int segs)
 #endif
 		TCP_SKB_CB(skb)->sacked |= TCPCB_RETRANS;
 		tp->retrans_out += tcp_skb_pcount(skb);
+		pr_debug("%s(%d) pcount:%d\n",__func__, __LINE__, tcp_skb_pcount(skb));
 
 		/* Save stamp of the first retransmit. */
 		if (!tp->retrans_stamp)

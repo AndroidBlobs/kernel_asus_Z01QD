@@ -214,6 +214,7 @@ struct pil_vote_info {
 
 #define PIL_SUBSYSTEM_NAME_LEN 32
 static char default_peripheral[PIL_SUBSYSTEM_NAME_LEN];
+extern int modem_resume_irq_flag_function(void);/*ASUS-BBSP yujoe Log Modem Wake Up Info+*/
 
 enum {
 	DOWN,
@@ -409,7 +410,11 @@ static void ipc_router_log_msg(void *log_ctx, u32 xchng_type,
 			svc_id, svc_ins, hdr->src_node_id, hdr->src_port_id,
 			hdr->dst_node_id, hdr->dst_port_id,
 			(unsigned int)pl_buf, (unsigned int)(pl_buf >> 32));
-
+		/*ASUS-BBSP yujoe Log Modem Wake Up Info+++*/
+		if (modem_resume_irq_flag_function()) {
+			pr_info("[WakeUpInfo-IPCRTR]svc=0x%x, type=%d, msg=0x%x\n", svc_id, (uint8_t)(pl_buf>>0), (uint8_t)(pl_buf>>24));
+		}
+		/*ASUS-BBSP Log Modem Wake Up Info---*/
 	} else {
 		msg = (union rr_control_msg *)data;
 		if (msg->cmd == IPC_ROUTER_CTRL_CMD_NEW_SERVER ||

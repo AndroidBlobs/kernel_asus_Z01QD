@@ -455,9 +455,23 @@ static void tcp_fastopen_synack_timer(struct sock *sk)
  */
 void tcp_retransmit_timer(struct sock *sk)
 {
+
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct net *net = sock_net(sk);
 	struct inet_connection_sock *icsk = inet_csk(sk);
+
+	pr_debug("VSC: %s(%d) s:%pI4::%d, d:%pI4::%d rto: %d cwnd:%d "
+			"backoff: %d retrans: %d lost:%d \n",
+			__func__,
+			__LINE__,
+			&inet_sk(sk)->inet_saddr,
+			ntohs(inet_sk(sk)->inet_sport),
+			&inet_sk(sk)->inet_daddr,
+			ntohs(inet_sk(sk)->inet_dport),
+			icsk->icsk_rto*10,
+			/*icsk->icsk_rto,*/
+			tp->snd_cwnd, icsk->icsk_backoff, tp->retrans_out,
+			tp->lost_out);
 
 	if (tp->fastopen_rsk) {
 		WARN_ON_ONCE(sk->sk_state != TCP_SYN_RECV &&
@@ -591,6 +605,14 @@ out_reset_timer:
 		__sk_dst_reset(sk);
 
 out:;
+
+	pr_debug("VSC: %s(%d) rto: %d cwnd:%d "
+			"backoff: %d retrans: %d lost:%d \n",
+			__func__,
+			__LINE__,
+			icsk->icsk_rto*10,
+			tp->snd_cwnd, icsk->icsk_backoff, tp->retrans_out,
+			tp->lost_out);
 }
 
 /* Called with bottom-half processing disabled.

@@ -1858,7 +1858,8 @@ int snd_soc_runtime_set_dai_fmt(struct snd_soc_pcm_runtime *rtd,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(snd_soc_runtime_set_dai_fmt);
-
+char gCardName[256]={0};
+EXPORT_SYMBOL_GPL(gCardName);
 static int snd_soc_instantiate_card(struct snd_soc_card *card)
 {
 	struct snd_soc_codec *codec;
@@ -1897,6 +1898,7 @@ static int snd_soc_instantiate_card(struct snd_soc_card *card)
 	}
 
 	/* card bind complete so register a sound card */
+	strlcpy(gCardName, card->name, sizeof(gCardName));//mark_guo add: to make sdm845-tavil-snd-card to get the card 0
 	ret = snd_card_new(card->dev, SNDRV_DEFAULT_IDX1, SNDRV_DEFAULT_STR1,
 			card->owner, 0, &card->snd_card);
 	if (ret < 0) {
@@ -2077,7 +2079,8 @@ static int soc_probe(struct platform_device *pdev)
 	if (!card)
 		return -EINVAL;
 
-	dev_warn(&pdev->dev,
+	//dev_warn(&pdev->dev,
+	dev_err(&pdev->dev,
 		 "ASoC: machine %s should use snd_soc_register_card()\n",
 		 card->name);
 

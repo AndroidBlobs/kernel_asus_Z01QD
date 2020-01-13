@@ -1265,7 +1265,7 @@ static int dpcm_be_connect(struct snd_soc_pcm_runtime *fe,
 	list_add(&dpcm->list_be, &fe->dpcm[stream].be_clients);
 	list_add(&dpcm->list_fe, &be->dpcm[stream].fe_clients);
 
-	dev_dbg(fe->dev, "connected new DPCM %s path %s %s %s\n",
+	dev_dbg(fe->dev, "soc-pcm.c:%s:connected new DPCM %s path %s %s %s\n",__func__,
 			stream ? "capture" : "playback",  fe->dai_link->name,
 			stream ? "<-" : "->", be->dai_link->name);
 
@@ -1459,7 +1459,7 @@ int dpcm_path_get(struct snd_soc_pcm_runtime *fe,
 	paths = snd_soc_dapm_dai_get_connected_widgets(cpu_dai, stream, list,
 			dpcm_end_walk_at_be);
 
-	dev_dbg(fe->dev, "ASoC: found %d audio %s paths\n", paths,
+	dev_dbg(fe->dev, "soc-pcm.c:%s:ASoC: found %d audio %s paths\n", __func__, paths,
 			stream ? "capture" : "playback");
 
 	return paths;
@@ -1560,7 +1560,7 @@ static int dpcm_add_paths(struct snd_soc_pcm_runtime *fe, int stream,
 		new++;
 	}
 
-	dev_dbg(fe->dev, "ASoC: found %d new BE paths\n", new);
+	dev_dbg(fe->dev, "soc-pcm.c:%s:ASoC: found %d new BE paths\n", __func__, new);
 	return new;
 }
 
@@ -2645,10 +2645,16 @@ static int soc_pcm_ioctl(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_platform *platform = rtd->platform;
-
-	if (platform->driver->ops && platform->driver->ops->ioctl)
-		return platform->driver->ops->ioctl(substream, cmd, arg);
-	return snd_pcm_lib_ioctl(substream, cmd, arg);
+	int nResult=-1;
+	//printk("soc-pcm.c:%s +++\n", __func__);
+	if (platform->driver->ops && platform->driver->ops->ioctl){
+		nResult= platform->driver->ops->ioctl(substream, cmd, arg);
+		//printk("soc-pcm.c:%s , return from platform->driver->ops->ioctl ---\n", __func__);
+		return nResult;
+	}
+	nResult = snd_pcm_lib_ioctl(substream, cmd, arg);
+	//printk("soc-pcm.c:%s -, return from snd_pcm_lib_ioctl --\n", __func__);
+	return nResult;
 }
 
 static int dpcm_run_update_shutdown(struct snd_soc_pcm_runtime *fe, int stream)

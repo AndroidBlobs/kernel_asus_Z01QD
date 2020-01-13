@@ -60,20 +60,55 @@ MODULE_PARM_DESC(slots, "Module names assigned to the slots.");
 
 #define SND_CARD_STATE_MAX_LEN 16
 
+extern char gCardName[256];//mark_guo add:to make sdm845-tavil-snd-card to get the card 0
 /* return non-zero if the given index is reserved for the given
  * module via slots option
  */
 static int module_slot_match(struct module *module, int idx)
 {
 	int match = 1;
-#ifdef MODULE
+//#ifdef MODULE //mark_guo change: to make sdm845-tavil-snd-card to get the card 0
 	const char *s1, *s2;
-
-	if (!module || !*module->name || !slots[idx])
-		return 0;
-
-	s1 = module->name;
+	
+	//printk("%s:+++\n", __func__);
+	if(!slots[0]){
+		slots[0]=kzalloc(100, GFP_KERNEL);
+		strlcpy(slots[0], "sdm845-tavil-snd-card", 22);
+		printk("%s:slots[0]=%s\n", __func__, slots[0]);
+	}
+	#if 0
+	if (!module || !*module->name || !slots[idx]){
+		if(!module){
+			printk("%s:module=NULL\n", __func__);
+			return 0;
+		}
+		else
+			if(!*module->name){
+				printk("%s:module->name=NULL\n", __func__);
+				return 0;
+			}
+		if(!slots[idx]){
+			printk("%s:slots[%d]=NULL\n", __func__, idx);
+			//return 0;
+			return 0;
+		}
+	}
+	#else
+	if (!gCardName[0] ||!slots[idx]){
+		if(!gCardName[0]){
+			printk("%s:gCardName[0]=0, ---\n", __func__);
+			return 0;
+		}
+		if(!slots[idx]){
+			printk("%s:slots[%d]=NULL, ---\n", __func__, idx);
+			return 0;
+		}
+	}
+	#endif
+	//s1 = module->name;
+	s1=gCardName;
 	s2 = slots[idx];
+	printk("%s:gCardName=%s, s2=%s\n", __func__, s1, s2);
 	if (*s2 == '!') {
 		match = 0; /* negative match */
 		s2++;
@@ -88,12 +123,17 @@ static int module_slot_match(struct module *module, int idx)
 			c1 = '_';
 		if (c2 == '-')
 			c2 = '_';
-		if (c1 != c2)
+		//printk("%s:c1=%c,c2=%c\n", __func__, c1, c2);
+		if (c1 != c2){
+			//printk("%s:match=%d, ---\n", __func__, match);
 			return !match;
+		}
 		if (!c1)
 			break;
 	}
-#endif /* MODULE */
+	//kfree(slots[0]);
+//#endif /* MODULE */
+	//printk("%s:match=%d, ---\n", __func__, match);
 	return match;
 }
 
@@ -577,6 +617,7 @@ static const char *retrieve_id_from_card_name(const char *name)
 			spos = name + 1;
 		name++;
 	}
+	printk("init.c:%s:final card id=%s\n", __func__, spos);
 	return spos;
 }
 
@@ -813,6 +854,7 @@ int snd_card_register(struct snd_card *card)
 	snd_cards[card->number] = card;
 	mutex_unlock(&snd_card_mutex);
 	init_info_for_card(card);
+	printk("init.c:%s:card->number=%d, card->id=%s\n", __func__, card->number, card->id);
 #if IS_ENABLED(CONFIG_SND_MIXER_OSS)
 	if (snd_mixer_oss_notify_callback)
 		snd_mixer_oss_notify_callback(card, SND_MIXER_OSS_NOTIFY_REGISTER);

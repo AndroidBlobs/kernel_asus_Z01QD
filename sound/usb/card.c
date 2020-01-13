@@ -657,6 +657,22 @@ static int usb_audio_probe(struct usb_interface *intf,
 	if (err < 0)
 		return err;
 
+	/* ZS600KLD : phone/pc mode control */
+	if (USB_ID_VENDOR(id)==0xbda &&
+		USB_ID_PRODUCT(id)==0x4a44) {
+
+		/* send 0x40 0x61 0xDA 0x0B 0x44 0x4A 0x08 0x00 */
+		char buf[8] = {0};
+		err = snd_usb_ctl_msg(dev, usb_sndctrlpipe(dev, 0),
+			      0x61,
+			      0x40,
+			      0x0bda,
+			      0x4a44,
+			      buf, 0x08);
+		if (err < 0)
+			dev_err(&dev->dev, "%s, special control sends fail\n", __func__);
+	}
+
 	/*
 	 * found a config.  now register to ALSA
 	 */
@@ -735,16 +751,23 @@ static int usb_audio_probe(struct usb_interface *intf,
 	chip->num_interfaces++;
 	usb_set_intfdata(intf, chip);
 	intf->needs_remote_wakeup = 1;
-	usb_enable_autosuspend(chip->dev);
+	if (chip->usb_id == USB_ID(0x262a, 0x1534))
+		pr_info("%s: [USB] LeTV earphone not support autosuspend\n", __func__);
+	else
+		usb_enable_autosuspend(chip->dev);
 	atomic_dec(&chip->active);
 	mutex_unlock(&register_mutex);
+	pr_info("%s: [USB] usb sound card driver loaded !\n", __func__);
 	return 0;
 
  __error:
 	if (chip) {
+		/* chip->active is inside the chip->card object,
+		 * decrement before memory is possibly returned.
+		 */
+		atomic_dec(&chip->active);
 		if (!chip->num_interfaces)
 			snd_card_free(chip->card);
-		atomic_dec(&chip->active);
 	}
 	mutex_unlock(&register_mutex);
 	return err;
@@ -881,6 +904,7 @@ static int usb_audio_suspend(struct usb_interface *intf, pm_message_t message)
 			snd_usb_mixer_suspend(mixer);
 	}
 
+	printk("[USB_PM] usb_audio_suspend, dev=%s\n", dev_name(&intf->dev));
 	return 0;
 }
 
@@ -922,6 +946,7 @@ err_out:
 
 static int usb_audio_resume(struct usb_interface *intf)
 {
+	printk("[USB_PM] usb_audio_resume, dev=%s\n", dev_name(&intf->dev));
 	return __usb_audio_resume(intf, false);
 }
 

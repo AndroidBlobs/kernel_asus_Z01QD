@@ -238,6 +238,8 @@ static int limits_dcvs_write(uint32_t node_id, uint32_t fn,
 	uint32_t *payload = NULL;
 	uint32_t payload_len;
 
+    printk("limits_dcvs_write setting=%d, val=%d\n", setting, val);
+
 	payload_len = ((enable_val1) ? 6 : 5) * sizeof(uint32_t);
 	payload = kzalloc(payload_len, GFP_KERNEL);
 	if (!payload)
@@ -283,20 +285,22 @@ static int lmh_set_trips(void *data, int low, int high)
 {
 	struct limits_dcvs_hw *hw = (struct limits_dcvs_hw *)data;
 	int ret = 0;
-
+    if(high == 105000)
+        low = 75000;
+    printk("lmh_set_trips 1 low = %d, high=%d\n", low, high);
 	if (high >= LIMITS_TEMP_HIGH_THRESH_MAX || low < 0) {
-		pr_err("Value out of range low:%d high:%d\n",
+		printk("Value out of range low:%d high:%d\n",
 				low, high);
 		return -EINVAL;
 	}
-
+    printk("lmh_set_trips 2 low = %d, high=%d\n", low, high);
 	/* Sanity check limits before writing to the hardware */
 	if (low >= high)
 		return -EINVAL;
 
 	hw->temp_limits[LIMITS_TRIP_HI] = (uint32_t)high;
 	hw->temp_limits[LIMITS_TRIP_ARM] = (uint32_t)low;
-
+    printk("lmh_set_trips 3 low = %d, high=%d\n", low, high);
 	ret =  limits_dcvs_write(hw->affinity, LIMITS_SUB_FN_THERMAL,
 				  LIMITS_ARM_THRESHOLD, low, 0, 0);
 	if (ret)

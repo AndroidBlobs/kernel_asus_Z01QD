@@ -1,0 +1,111 @@
+//asus_bsp_Mike change for ER setting +++
+
+&pm8998_gpios {	       
+	camera_vaf_en {
+		camera_vaf_en_default {
+			pins = "gpio13"; //asus_bsp_mike use ER setting
+			function = "normal";
+			power-source = <0>;
+			output-low;
+		};
+	};
+};
+
+ &actuator_regulator {
+	gpio = <&pm8998_gpios 13 0>; //asus_bsp_mike use ER setting
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&camera_vaf_en_default>;
+ };
+
+
+&cam_cci {
+	qcom,cam-sensor@0 {
+		cell-index = <0>;
+		compatible = "qcom,cam-sensor";
+		reg = <0x0>;
+		csiphy-sd-index = <0>;
+		sensor-position-roll = <90>;
+		sensor-position-pitch = <0>;
+		sensor-position-yaw = <180>;
+		led-flash-src = <&led_flash_rear>;
+		actuator-src = <&actuator_rear1>;
+		ois-src = <&ois_rear1>;
+		eeprom-src = <&eeprom_rear0>;
+		cam_vio-supply = <&pm8998_lvs1>;
+		cam_vana-supply = <&camera_rear_vana_ldo>;//mike use ER setting
+		cam_vdig-supply = <&camera_rearimx363_vdig_ldo>;//asus_bsp_mike +++
+		//cam_vaf-supply = <&pm8998_l22>;
+		cam_clk-supply = <&titan_top_gdsc>;
+		regulator-names = "cam_vio", "cam_vana", "cam_vdig",
+			"cam_vaf","cam_clk";
+		rgltr-cntrl-support;
+		rgltr-min-voltage = <1800000 2800000 1050000 2864000 0>;
+		rgltr-max-voltage = <1800000 2800000 1050000 2864000 0>;
+		rgltr-load-current = <300000 100000 232300 0 0>;
+		gpio-no-mux = <0>;
+		pinctrl-names = "cam_default", "cam_suspend";
+		pinctrl-0 = <&cam_sensor_mclk1_active>;
+		pinctrl-1 = <&cam_sensor_mclk1_suspend>;
+		gpios = <&tlmm 14 0>,
+			<&tlmm 69 0>;
+		gpio-reset = <1>;
+		gpio-vana = <0x0>;
+		gpio-req-tbl-num = <0 1>;
+		gpio-req-tbl-flags = <1 0>;
+		gpio-req-tbl-label = "CAMIF_MCLK0",
+					"CAM_RESET0";
+		sensor-mode = <0>;
+		cci-master = <0>;
+		status = "ok";
+		clocks = <&clock_camcc CAM_CC_MCLK1_CLK>;
+		clock-names = "cam_clk";
+		clock-cntl-level = "turbo";
+		clock-rates = <19200000>;
+	};
+
+
+	qcom,cam-sensor@1 {
+		cell-index = <1>;
+		compatible = "qcom,cam-sensor";
+		reg = <0x1>;
+		csiphy-sd-index = <2>;
+		sensor-position-roll = <270>;
+		sensor-position-pitch = <0>;
+		sensor-position-yaw = <0>;
+		actuator-src = <0x0>;
+		led-flash-src = <0x0>;
+		eeprom-src = <&eeprom_front1>;
+		cam_vdig-supply = <&camera_rear1_vdig_ldo>;
+		cam_vio-supply = <&pm8998_lvs1>;
+		cam_vana-supply = <&camera_rear_vana_ldo>;
+		cam_clk-supply = <&titan_top_gdsc>;
+		regulator-names = "cam_vdig","cam_vio", "cam_vana",
+			"cam_clk";
+		rgltr-cntrl-support;
+		rgltr-min-voltage = <1200000 1800000 2800000 0>;
+		rgltr-max-voltage = <1200000 1800000 2800000 0>;
+		rgltr-load-current = <300000 300000 21500 0>;
+		gpio-no-mux = <0>;
+		pinctrl-names = "cam_default", "cam_suspend";
+		pinctrl-0 = <&cam_sensor_mclk2_active>;
+		pinctrl-1 = <&cam_sensor_mclk2_suspend>;
+		gpios = <&tlmm 15 0>,
+			<&tlmm 9 0>;
+		gpio-reset = <1>;
+		gpio-vana = <0x0>;
+		gpio-req-tbl-num = <0 1>;
+		gpio-req-tbl-flags = <1 0>;
+		gpio-req-tbl-label = "CAMIF_MCLK1",
+					"CAM_RESET1";
+		sensor-mode = <0>;
+		cci-master = <1>;
+		status = "ok";
+		clocks = <&clock_camcc CAM_CC_MCLK2_CLK>;
+		clock-names = "cam_clk";
+		clock-cntl-level = "turbo";
+		clock-rates = <6400000>;
+	};
+
+};
+
+//asus_bsp_Mike change for ER setting ---

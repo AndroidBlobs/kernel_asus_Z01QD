@@ -99,6 +99,7 @@
 			qcom,boost-threshold-ua = <100000>;
 			qcom,wipower-max-uw = <5000000>;
 			dpdm-supply = <&qusb_phy0>;
+			dpdm2-supply = <&qusb_phy1>; //This is added for USB2 controller
 
 			qcom,thermal-mitigation
 					= <3000000 1500000 1000000 500000>;
@@ -221,7 +222,7 @@
 			compatible = "qcom,qpnp-pdphy";
 			reg = <0x1700 0x100>;
 			vdd-pdphy-supply = <&pm8998_l24>;
-			vbus-supply = <&ext_5v_boost>;
+			vbus-supply = <&smb2_vbus>;
 			vconn-supply = <&smb2_vconn>;
 			interrupts = <0x2 0x17 0x0 IRQ_TYPE_EDGE_RISING>,
 				     <0x2 0x17 0x1 IRQ_TYPE_EDGE_RISING>,
@@ -240,8 +241,8 @@
 					  "msg-rx-discarded";
 
 			qcom,default-sink-caps = <5000 3000>, /* 5V @ 3A */
-						 <9000 3000>, /* 9V @ 3A */
-						 <12000 2250>; /* 12V @ 2.25A */
+						 <7500 2000>, /* 7.5V @ 2A */
+						 <9000 1650>; /* 9V @ 1.65A */
 		};
 
 		bcl_sensor: bcl@4200 {
@@ -456,7 +457,8 @@
 				qcom,default-state = "off";
 				linux,name = "green";
 			};
-
+//ASUS_BSP Deeo : disable Blue LED
+/*
 			blue_led: qcom,rgb_2 {
 				label = "rgb";
 				qcom,id = <5>;
@@ -467,6 +469,7 @@
 				qcom,default-state = "off";
 				linux,name = "blue";
 			};
+*/
 		};
 
 		labibb: qpnp-labibb-regulator {
@@ -832,13 +835,13 @@
 
 		trips {
 			low_soc: low-soc {
-				temperature = <10>;
+				temperature = <5>;
 				hysteresis = <0>;
 				type = "passive";
 			};
 		};
 		cooling-maps {
-			soc_cpu4 {
+			/*soc_cpu4 {
 				trip = <&low_soc>;
 				cooling-device =
 					<&CPU4 THERMAL_MAX_LIMIT
@@ -849,18 +852,18 @@
 				cooling-device =
 					<&CPU5 THERMAL_MAX_LIMIT
 						THERMAL_MAX_LIMIT>;
-			};
+			};*/
 			soc_map6 {
 				trip = <&low_soc>;
 				cooling-device =
-					<&CPU6 THERMAL_MAX_LIMIT
-						THERMAL_MAX_LIMIT>;
+					<&CPU6 12
+						12>;
 			};
 			soc_map7 {
 				trip = <&low_soc>;
 				cooling-device =
-					<&CPU7 THERMAL_MAX_LIMIT
-						THERMAL_MAX_LIMIT>;
+					<&CPU7 12
+						12>;
 			};
 		};
 	};

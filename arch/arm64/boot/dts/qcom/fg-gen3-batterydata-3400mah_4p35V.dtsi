@@ -1,0 +1,72 @@
+
+qcom,2870788_asus_c11p1701_3400mah_averaged_masterslave_apr18th2017_4p35v {
+	qcom, = <24>;
+	/* #2870788_Asus_C11P1701_3400mAh_averaged_MasterSlave_Apr18th2017*/
+	qcom,max-voltage-uv = <4358000>;
+	qcom,nom-batt-capacity-mah = <3400>;
+      	qcom,fg-cc-cv-threshold-mv = <4330>;
+     	qcom,fastchg-current-ma = <3650>;
+	qcom,batt-id-kohm = <100>;
+	qcom,battery-beta = <3435>;
+	qcom,battery-type = "c11p1701_3400mah_apr18th2017_4p35v";
+	qcom,checksum = <0xEA50>;
+	qcom,gui-version = "PMI8998GUI - 2.0.0.57";
+	qcom,fg-profile-data = [
+		 E8 1F 3D 05
+		 9F 0A 29 06
+		 37 1D 73 EB
+		 6B 02 DD 0D
+		 11 18 74 23
+		 E8 44 D6 53
+		 64 00 00 00
+		 0E 00 00 00
+		 00 00 BD CD
+		 08 B5 34 BA
+		 17 00 08 00
+		 CB C2 2A DC
+		 1D F4 8A EA
+		 AB EA 9F 0A
+		 8F FD C1 23
+		 18 06 09 20
+		 27 00 14 00
+		 C3 1F 97 05
+		 53 0A E7 FC
+		 44 1D E9 F2
+		 7C 02 C9 0C
+		 D3 18 15 23
+		 40 45 5D 53
+		 5A 00 00 00
+		 0E 00 00 00
+		 00 00 54 CD
+		 E5 AB 6B B4
+		 14 00 00 00
+		 AA E3 2A DC
+		 71 F4 69 EA
+		 A7 00 71 0A
+		 AF FD 91 13
+		 9C 33 CC FF
+		 07 10 00 00
+		 1F 0D 99 45
+		 14 00 40 00
+		 86 01 0A FA
+		 FF 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+	];
+};

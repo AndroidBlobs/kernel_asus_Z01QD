@@ -343,7 +343,83 @@
 			};
 		};
 
+		/*  ASUS_BSP Freddy +++++  */
+		tlmm_gpio_key {
+			gpio_key_active: gpio_key_active {
+				mux {
+					pins = "gpio103" , "gpio123";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio103" , "gpio123";
+					drive-strength = <2>;
+					bias-pull-up;
+				};
+			};
+
+			gpio_key_suspend: gpio_key_suspend {
+				mux {
+					pins = "gpio103" , "gpio123";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio103" , "gpio123";
+					drive-strength = <2>;
+					bias-pull-up;
+				};
+			};
+
+			/*  ASUS_BSP Deeo : For JEDI station power key +++  */
+			station_key_active: station_key_active {
+				mux {
+					pins = "gpio11";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio11";
+					drive-strength = <2>;
+					bias-pull-up;
+				};
+			};
+
+			station_key_suspend: station_key_suspend {
+				mux {
+					pins = "gpio11";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio11";
+					drive-strength = <2>;
+					bias-pull-up;
+				};
+			};
+
+			station_key_remove: station_key_remove {
+				mux {
+					pins = "gpio11";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio11";
+					drive-strength = <2>;
+					output-low;
+					bias-disable;
+				};
+			};
+			/*  ASUS_BSP Deeo : For JEDI station power key ---  */
+		};
+		/*  ASUS_BSP Freddy ----  */
+
 		pcie1 {
+/*
+*
+*gpio103 is volup key ASUS_BSP Freddy
+
 			pcie1_clkreq_default: pcie1_clkreq_default {
 				mux {
 					pins = "gpio103";
@@ -356,7 +432,7 @@
 					bias-pull-up;
 				};
 			};
-
+*/
 			pcie1_perst_default: pcie1_perst_default {
 				mux {
 					pins = "gpio102";

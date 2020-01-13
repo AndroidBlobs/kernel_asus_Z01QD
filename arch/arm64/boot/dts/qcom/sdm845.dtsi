@@ -647,12 +647,18 @@
 			alignment = <0 0x400000>;
 			size = <0 0x5c00000>;
 		};
-
 		dump_mem: mem_dump_region {
 			compatible = "shared-dma-pool";
 			reusable;
 			size = <0 0x2400000>;
 		};
+
+       	        asus_debug_mem: asus_debug_region@0 {
+       	                 compatible = "removed-dma-pool";
+       	                 no-map;
+   		         reg = <0x0 0xA0000000 0x0 0x00300000>;
+       		};
+
 
 		/* global autoconfigured region for contiguous allocations */
 		linux,cma {
@@ -1853,30 +1859,11 @@
 			iommus = <&apps_smmu 0x1406 0x30>;
 			dma-coherent;
 		};
-		qcom,msm_fastrpc_compute_cb7 {
-			compatible = "qcom,msm-fastrpc-compute-cb";
-			label = "cdsprpc-smd";
-			iommus = <&apps_smmu 0x1407 0x30>;
-			dma-coherent;
-		};
-		qcom,msm_fastrpc_compute_cb8 {
-			compatible = "qcom,msm-fastrpc-compute-cb";
-			label = "cdsprpc-smd";
-			iommus = <&apps_smmu 0x1408 0x30>;
-			dma-coherent;
-		};
 		qcom,msm_fastrpc_compute_cb9 {
 			compatible = "qcom,msm-fastrpc-compute-cb";
 			label = "cdsprpc-smd";
 			qcom,secure-context-bank;
 			iommus = <&apps_smmu 0x1409 0x30>;
-			dma-coherent;
-		};
-		qcom,msm_fastrpc_compute_cb10 {
-			compatible = "qcom,msm-fastrpc-compute-cb";
-			label = "cdsprpc-smd";
-			qcom,secure-context-bank;
-			iommus = <&apps_smmu 0x140A 0x30>;
 			dma-coherent;
 		};
 		qcom,msm_fastrpc_compute_cb11 {
@@ -2647,7 +2634,7 @@
 
 	qcom,rmtfs_sharedmem@0 {
 		compatible = "qcom,sharedmem-uio";
-		reg = <0x0 0x200000>;
+		reg = <0x0 0x500000>;
 		reg-names = "rmtfs";
 		qcom,client-id = <0x00000001>;
 		qcom,guard-memory;
@@ -3737,7 +3724,7 @@
 
 			trips {
 				active-config {
-					temperature = <95000>;
+					temperature = <105000>;
 					hysteresis = <30000>;
 					type = "passive";
 				};
@@ -3752,7 +3739,7 @@
 
 			trips {
 				active-config {
-					temperature = <95000>;
+					temperature = <105000>;
 					hysteresis = <30000>;
 					type = "passive";
 				};
@@ -3974,7 +3961,7 @@
 		qcom,smmu-fast-map;
 		qcom,smmu-coherent;
 		qcom,keep-radio-on-during-sleep;
-		status = "disabled";
+		status = "ok";
 	};
 };
 

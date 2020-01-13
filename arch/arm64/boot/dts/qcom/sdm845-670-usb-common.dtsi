@@ -363,7 +363,9 @@
 				"ss_phy_irq", "dm_hs_phy_irq";
 
 		USB3_GDSC-supply = <&usb30_sec_gdsc>;
+		qcom,usb-dbm = <&dbm_1p5_dwc3_2nd>;
 		qcom,dwc-usb3-msm-tx-fifo-size = <21288>;
+		qcom,num-gsi-evt-buffs = <0x3>;
 		qcom,use-pdc-interrupts;
 
 		clocks = <&clock_gcc GCC_USB30_SEC_MASTER_CLK>,
@@ -406,7 +408,6 @@
 			snps,hird-threshold = /bits/ 8 <0x10>;
 			snps,usb3_lpm_capable;
 			usb-core-id = <1>;
-			dr_mode = "host";
 		};
 	};
 
@@ -414,10 +415,13 @@
 	qusb_phy1: qusb@88e3000 {
 		compatible = "qcom,qusb2phy-v2";
 		reg = <0x088e3000 0x400>,
+			<0x007801e8 0x4>,
 			<0x088e7014 0x4>;
-		reg-names = "qusb_phy_base",
+		reg-names = "qusb_phy_base", "efuse_addr",
 				"refgen_north_bg_reg_addr";
 
+		qcom,efuse-bit-pos = <30>;
+		qcom,efuse-num-bits = <2>;
 		vdd-supply = <&pm8998_l1>;
 		vdda18-supply = <&pm8998_l12>;
 		vdda33-supply = <&pm8998_l24>;
@@ -603,4 +607,11 @@
 		reset-names = "phy_reset", "phy_phy_reset";
 		status = "disabled";
 	};
+
+        dbm_1p5_dwc3_2nd: dbm@a8f8000 {
+                compatible = "qcom,usb-dbm-1p5";
+                reg = <0xa8f8000 0x400>;
+                qcom,reset-ep-after-lpm-resume;
+        };
+
 };

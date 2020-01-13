@@ -12,6 +12,7 @@
  */
 
 #include <dt-bindings/clock/qcom,gcc-sdm845.h>
+#include <dt-bindings/regulator/qcom,rpmh-regulator.h>
 
 &soc {
 	pcie0: qcom,pcie@0x1c00000 {
@@ -457,7 +458,7 @@
 					0x1808 0x01 0x0>;
 
 		pinctrl-names = "default";
-		pinctrl-0 = <&pcie1_clkreq_default
+		pinctrl-0 = <//&pcie1_clkreq_default
 			&pcie1_perst_default
 			&pcie1_wake_default>;
 

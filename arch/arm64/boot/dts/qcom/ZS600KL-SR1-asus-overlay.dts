@@ -1,0 +1,150 @@
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include "ZS600KL-SR1EVB-asus-overlay.dts"
+
+/ {
+	model = "Qualcomm Technologies, Inc. SDM845 v2 JEDI SR1";
+	compatible = "qcom,sdm845-mtp", "qcom,sdm845", "qcom,mtp";
+	qcom,msm-id = <321 0x20000>;
+	qcom,board-id = <40 0>;
+};
+
+
+
+/*    ====================================
+ *    overlay for SDM845-v2.dtsi/SDM845.dtsi - start
+ *    ====================================
+ */
+
+
+
+/*    ====================================
+ *    overlay for SDM845-v2.dtsi/SDM845.dtsi - end
+ *    ====================================
+ */
+/*    ====================================
+ *    overlay for sdm845-mtp.dtsi - start
+ *    ====================================
+ */
+
+// ASUS_BSP Deeo : for simulated pogo det +++
+&soc{
+	ec_hid {
+		dongle,pogo-det = <&pmi8998_gpios 10 0x0>;
+
+		pinctrl-0 = <&pogo_sleep &pogo_det_sim>;
+	};
+};
+
+&pmi8998_gpios {
+	gpio10_pogo_det_sim {
+		pogo_det_sim: pogo_det_sim {
+			pins = "gpio10";
+			function = "normal";
+			output-low;
+			power-source = <0>;
+		};
+	};
+};
+
+// ASUS_BSP Deeo : for simulated pogo det ---
+
+/*    ====================================
+ *    overlay for sdm845-mtp.dtsi - end
+ *    ====================================
+ */
+/*    ====================================
+ *    overlay for pmi8998.dtsi/pm8998.dtsi - start
+ *    ====================================
+ */
+
+
+
+/*    ====================================
+ *    overlay for pmi8998.dtsi/pm8998.dtsi - end
+ *    ====================================
+ */
+/*    ====================================
+ *    overlay for sdm845-pinctrl.dtsi - start
+ *    ====================================
+ */
+
+
+
+/*    ====================================
+ *    overlay for sdm845-pinctrl.dtsi - end
+ *    ====================================
+ */
+/*    ====================================
+ *    overlay for sdm845-regulator.dtsi - start
+ *    ====================================
+ */
+
+
+
+/*    ====================================
+ *    overlay for sdm845-regulator.dtsi - end
+ *    ====================================
+ */
+/*    ====================================
+ *    overlay for sdm845-camera.dtsi - start
+ *    ====================================
+ */
+
+/ {
+        reserved-memory {
+                asus_debug_mem: asus_debug_region@0 {
+                        compatible = "removed-dma-pool";
+                        no-map;
+                        reg = <0x0 0xA0000000 0x0 0x00300000>;
+                };
+        };
+};
+
+
+
+
+/*    ====================================
+ *    overlay for sdm845-camera.dtsi - end
+ *    ====================================
+ */
+/*    ====================================
+ *    overlay for sdm845-audio.dtsi - start
+ *    ====================================
+ */
+
+
+
+/*    ====================================
+ *    overlay for sdm845-audio.dtsi - end
+ *    ====================================
+ */
+
+
+
+/*    ====================================
+ *    overlay for sdm845-audio-overlay.dtsi - start
+ *    ====================================
+ */
+
+
+
+/*    ====================================
+ *    overlay for sdm845-audio-overlay.dtsi - end
+ *    ====================================
+ */
+
+ 

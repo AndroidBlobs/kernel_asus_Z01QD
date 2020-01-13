@@ -45,13 +45,13 @@
 				qcom,pull-up = <1>;
 				linux,code = <116>;
 			};
-
+/*
 			qcom,pon_2 {
 				qcom,pon-type = <1>;
 				qcom,pull-up = <1>;
 				linux,code = <114>;
 			};
-
+*/
 			qcom,pon_3 {
 				qcom,pon-type = <3>;
 				qcom,support-reset = <1>;

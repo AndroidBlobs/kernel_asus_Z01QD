@@ -943,6 +943,76 @@ end:
 	return len;
 }
 
+// ASUS BSP Display +++
+static ssize_t dp_debug_write_asus(struct file *file,
+        const char __user *user_buff, size_t count, loff_t *ppos)
+{
+	struct dp_debug_private *debug = file->private_data;
+	char buf[SZ_8];
+	size_t len = 0;
+	int msg;
+
+	if (!debug)
+		return -ENODEV;
+
+	if (*ppos)
+		return 0;
+
+	/* Leave room for termination char */
+	len = min_t(size_t, count, SZ_8 - 1);
+	if (copy_from_user(buf, user_buff, len))
+		goto end;
+
+	buf[len] = '\0';
+
+	if (kstrtoint(buf, 10, &msg) != 0)
+		goto end;
+
+	pr_err("[Display] command start !!!!!!!!!!!\n");
+	debug->usbpd->asus_debug(debug->usbpd, msg);
+
+end:
+	return -len;
+}
+
+static ssize_t dp_debug_write_station(struct file *file,
+		const char __user *user_buff, size_t count, loff_t *ppos)
+{
+	struct dp_debug_private *debug = file->private_data;
+	char buf[SZ_8];
+	size_t len = 0;
+	int msg;
+
+	if (!debug)
+		return -ENODEV;
+
+	if (*ppos)
+		return 0;
+
+	/* Leave room for termination char */
+	len = min_t(size_t, count, SZ_8 - 1);
+	if (copy_from_user(buf, user_buff, len))
+		goto end;
+
+	buf[len] = '\0';
+
+	if (kstrtoint(buf, 10, &msg) != 0)
+		goto end;
+
+	pr_err("[Display] station command is %d !!!!!!!!!!!\n", msg);
+	if (msg == 0) {
+		debug->link->psm_config(debug->link, &debug->panel->link_info, true);
+	} else if (msg == 1) {
+		debug->link->psm_config(debug->link, &debug->panel->link_info, false);
+	} else {
+		pr_err("[Display] command unsupported !!!!!!!!!!!\n");
+	}
+
+end:
+	return -len;
+}
+// ASUS BSP Display ---
+
 static ssize_t dp_debug_write_dump(struct file *file,
 		const char __user *user_buff, size_t count, loff_t *ppos)
 {
@@ -1071,6 +1141,18 @@ static const struct file_operations attention_fops = {
 	.open = simple_open,
 	.write = dp_debug_write_attention,
 };
+
+// ASUS BSP Display +++
+static const struct file_operations asus_fops = {
+	.open = simple_open,
+	.write = dp_debug_write_asus,
+};
+
+static const struct file_operations station_fops = {
+	.open = simple_open,
+	.write = dp_debug_write_station,
+};
+// ASUS BSP Display ---
 
 static const struct file_operations dump_fops = {
 	.open = simple_open,
@@ -1206,6 +1288,26 @@ static int dp_debug_init(struct dp_debug *dp_debug)
 			DEBUG_NAME, rc);
 		goto error_remove_dir;
 	}
+
+	// ASUS BSP Display +++
+	file = debugfs_create_file("asus", 0644, dir,
+		debug, &asus_fops);
+	if (IS_ERR_OR_NULL(file)) {
+		rc = PTR_ERR(file);
+		pr_err("[%s] debugfs asus failed, rc=%d\n",
+			DEBUG_NAME, rc);
+		goto error_remove_dir;
+	}
+
+	file = debugfs_create_file("station", 0644, dir,
+		debug, &station_fops);
+	if (IS_ERR_OR_NULL(file)) {
+		rc = PTR_ERR(file);
+		pr_err("[%s] debugfs station failed, rc=%d\n",
+			DEBUG_NAME, rc);
+		goto error_remove_dir;
+	}
+	// ASUS BSP Display ---
 
 	file = debugfs_create_file("dump", 0644, dir,
 		debug, &dump_fops);

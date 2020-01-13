@@ -529,8 +529,12 @@ static int dp_audio_ack_done(struct platform_device *pdev, u32 ack)
 
 	pr_debug("acknowledging audio (%d)\n", ack_hpd);
 
-	if (!audio->engine_on)
-		complete_all(&audio->hpd_comp);
+	if (!audio->engine_on) {
+		if (&audio->hpd_comp != NULL) {
+			complete_all(&audio->hpd_comp);
+		} else
+			pr_err("[Display] hpd comp is NULL.\n");
+	}
 end:
 	return rc;
 }

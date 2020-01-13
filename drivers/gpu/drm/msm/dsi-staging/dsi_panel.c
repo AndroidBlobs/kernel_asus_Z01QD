@@ -22,6 +22,9 @@
 
 #include "dsi_panel.h"
 #include "dsi_ctrl_hw.h"
+#if defined(CONFIG_PXLW_IRIS3)
+#include "dsi_iris3_api.h"
+#endif
 
 /**
  * topology is currently defined by a set of following 3 values:
@@ -42,6 +45,22 @@
 #define DEFAULT_PANEL_JITTER_ARRAY_SIZE		2
 #define MAX_PANEL_JITTER		10
 #define DEFAULT_PANEL_PREFILL_LINES	25
+
+/* ASUS BSP Display, add for dfps */
+extern int lastFps;
+/* ASUS BSP Display, add for esd check */
+extern bool esdFail;
+extern int fts_ts_suspend(void);
+extern int fts_ts_resume(void);
+
+int lastBL = 1023;
+bool panelOff = false;
+extern enum DEVICE_HWID g_ASUS_hwID;
+bool readOSC = false;
+u8 osc_alpm = 0;
+u8 osc_normal = 0;
+extern bool g_lock_bl_level;
+extern int g_set_dimming_mode;
 
 enum dsi_dsc_ratio_type {
 	DSC_8BPC_8BPP,
@@ -214,6 +233,12 @@ int dsi_dsc_create_pps_buf_cmd(struct msm_display_dsc_info *dsc, char *buf,
 	return 128;
 }
 
+int get_last_backlight_value(void)
+{
+	return lastBL;
+}
+EXPORT_SYMBOL(get_last_backlight_value);
+
 static int dsi_panel_vreg_get(struct dsi_panel *panel)
 {
 	int rc = 0;
@@ -289,6 +314,29 @@ static int dsi_panel_gpio_request(struct dsi_panel *panel)
 		}
 	}
 
+#if defined(CONFIG_PXLW_IRIS3)
+	if (gpio_is_valid(r_config->abyp_gpio)) {
+		rc = gpio_request(r_config->abyp_gpio, "analog_bypass");
+		if (rc) {
+			pr_err("request for abyp_gpio failed, rc=%d\n", rc);
+			if (gpio_is_valid(r_config->lcd_mode_sel_gpio))
+				gpio_free(r_config->lcd_mode_sel_gpio);
+			goto error_release_mode_sel;
+		}
+	}
+
+	if (gpio_is_valid(r_config->iris_rst_gpio)) {
+		rc = gpio_request(r_config->iris_rst_gpio, "iris_reset");
+		if (rc) {
+			pr_err("request for iris_rst_gpio failed, rc=%d\n", rc);
+			if (gpio_is_valid(r_config->lcd_mode_sel_gpio))
+				gpio_free(r_config->lcd_mode_sel_gpio);
+			if (gpio_is_valid(r_config->abyp_gpio))
+				gpio_free(r_config->abyp_gpio);
+			goto error_release_mode_sel;
+		}
+	}
+#endif
 	goto error;
 error_release_mode_sel:
 	if (gpio_is_valid(panel->bl_config.en_gpio))
@@ -319,6 +367,12 @@ static int dsi_panel_gpio_release(struct dsi_panel *panel)
 
 	if (gpio_is_valid(panel->reset_config.lcd_mode_sel_gpio))
 		gpio_free(panel->reset_config.lcd_mode_sel_gpio);
+#if defined(CONFIG_PXLW_IRIS3)
+	if (gpio_is_valid(r_config->abyp_gpio))
+		gpio_free(r_config->abyp_gpio);
+	if (gpio_is_valid(r_config->iris_rst_gpio))
+		gpio_free(r_config->iris_rst_gpio);
+#endif
 
 	return rc;
 }
@@ -360,6 +414,28 @@ static int dsi_panel_reset(struct dsi_panel *panel)
 			goto exit;
 		}
 	}
+
+#if defined(CONFIG_PXLW_IRIS3)
+	if (gpio_is_valid(panel->reset_config.iris_rst_gpio)) {
+		if (r_config->count) {
+			rc = gpio_direction_output(r_config->iris_rst_gpio, 1);
+			if (rc) {
+				pr_err("unable to set dir for iris reset gpio rc=%d\n", rc);
+				goto exit;
+			}
+		}
+
+		for (i = 0; i < r_config->count; i++) {
+			gpio_set_value(r_config->iris_rst_gpio,
+					r_config->sequence[i].level);
+
+
+			if (r_config->sequence[i].sleep_ms)
+				usleep_range(r_config->sequence[i].sleep_ms * 1000,
+						r_config->sequence[i].sleep_ms * 1000);
+		}
+	}
+#endif
 
 	if (r_config->count) {
 		rc = gpio_direction_output(r_config->reset_gpio,
@@ -426,10 +502,12 @@ static int dsi_panel_set_pinctrl_state(struct dsi_panel *panel, bool enable)
 	return rc;
 }
 
-
+void asus_dp_change_state(bool mode, int type);
 static int dsi_panel_power_on(struct dsi_panel *panel)
 {
 	int rc = 0;
+
+    pr_err("[Display] power_on++\n");
 
 	rc = dsi_pwr_enable_regulator(&panel->power_info, true);
 	if (rc) {
@@ -448,6 +526,10 @@ static int dsi_panel_power_on(struct dsi_panel *panel)
 		pr_err("[%s] failed to reset panel, rc=%d\n", panel->name, rc);
 		goto error_disable_gpio;
 	}
+
+	panelOff = false; /* ASUS BSP Display */
+    pr_err("[Display] power_on--\n");
+    asus_dp_change_state(true, 1);
 
 	goto exit;
 
@@ -471,11 +553,20 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 {
 	int rc = 0;
 
+    pr_err("[Display] power_off++\n");
+
+	panelOff = true;
+
 	if (gpio_is_valid(panel->reset_config.disp_en_gpio))
 		gpio_set_value(panel->reset_config.disp_en_gpio, 0);
 
 	if (gpio_is_valid(panel->reset_config.reset_gpio))
 		gpio_set_value(panel->reset_config.reset_gpio, 0);
+
+#if defined(CONFIG_PXLW_IRIS3)
+	if (gpio_is_valid(panel->reset_config.iris_rst_gpio))
+		gpio_set_value(panel->reset_config.iris_rst_gpio, 0);
+#endif
 
 	if (gpio_is_valid(panel->reset_config.lcd_mode_sel_gpio))
 		gpio_set_value(panel->reset_config.lcd_mode_sel_gpio, 0);
@@ -486,9 +577,18 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 		       rc);
 	}
 
+	g_lock_bl_level = false;
+	g_set_dimming_mode = 0;
+
+	//add for touch suspend  
+	fts_ts_suspend();
+	
 	rc = dsi_pwr_enable_regulator(&panel->power_info, false);
 	if (rc)
 		pr_err("[%s] failed to enable vregs, rc=%d\n", panel->name, rc);
+
+    pr_err("[Display] power_off--\n");
+    asus_dp_change_state(false, 1);
 
 	return rc;
 }
@@ -639,9 +739,24 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 
 	dsi = &panel->mipi_device;
 
-	rc = mipi_dsi_dcs_set_display_brightness(dsi, bl_lvl);
-	if (rc < 0)
-		pr_err("failed to update dcs backlight:%d\n", bl_lvl);
+	if(!g_lock_bl_level) {
+#if defined(CONFIG_PXLW_IRIS3) && !defined(IRIS3_ABYP_LIGHTUP)
+		rc = iris3_update_backlight(bl_lvl);
+#else
+		rc = mipi_dsi_dcs_set_display_brightness(dsi, bl_lvl);
+#endif
+		if (rc < 0)
+			pr_err("failed to update dcs backlight:%d\n", bl_lvl);
+		else
+			pr_err("set bl=%d\n", bl_lvl);
+	}
+
+	/* ASUS BSP Display +++ */
+	if (bl_lvl != 0)
+		lastBL = (int)bl_lvl;
+	else
+		panelOff = true;
+	/* ASUS BSP Display +++ */
 
 	return rc;
 }
@@ -650,6 +765,7 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 {
 	int rc = 0;
 	struct dsi_backlight_config *bl = &panel->bl_config;
+	static u32 pre_bl_lvl = 0;
 
 	if (panel->type == EXT_BRIDGE)
 		return 0;
@@ -666,6 +782,18 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 		pr_err("Backlight type(%d) not supported\n", bl->type);
 		rc = -ENOTSUPP;
 	}
+
+	//ASUS_BSP, to have more smooth backlight adjustment +++
+	if (lastFps == 90)
+		mdelay(10);
+	else {
+		if (pre_bl_lvl < bl_lvl)
+			mdelay(20);
+		else
+			mdelay(10);
+	}
+	pre_bl_lvl = bl_lvl;
+	//ASUS_BSP, to have more smooth backlight adjustment ---
 
 	return rc;
 }
@@ -1511,6 +1639,28 @@ const char *cmd_set_prop_map[DSI_CMD_SET_MAX] = {
 	"ROI not parsed from DTSI, generated dynamically",
 	"qcom,mdss-dsi-timing-switch-command",
 	"qcom,mdss-dsi-post-mode-switch-on-command",
+#if defined(CONFIG_PXLW_IRIS3)
+	"iris,abyp-panel-command",
+#endif
+	/* ASUS BSP Display, add for dfps +++ */
+	"qcom,mdss-dsi-on-60-command",
+	"qcom,mdss-dsi-60-command",
+	"qcom,mdss-dsi-90-command",
+	/* ASUS BSP Display, add for dfps --- */
+	/* ASUS BSP Display, add for pr stage +++ */
+	"qcom,mdss-dsi-on-60-pr-command",
+	"qcom,mdss-dsi-on-90-pr-command",
+	"qcom,mdss-dsi-60-pr-command",
+	"qcom,mdss-dsi-90-pr-command",
+	/* ASUS BSP Display, add for pr stage --- */
+	/* ASUS BSP Display, add for mp stage +++ */
+	"qcom,mdss-dsi-on-60-mp-command",
+	"qcom,mdss-dsi-on-90-mp-command",
+	"qcom,mdss-dsi-60-mp-command",
+	"qcom,mdss-dsi-90-mp-command",
+	/* ASUS BSP Display, add for mp stage --- */
+	"qcom,mdss-dsi-nolp-60-command",
+	"qcom,mdss-dsi-lp1-pr-command",
 };
 
 const char *cmd_set_state_map[DSI_CMD_SET_MAX] = {
@@ -1535,6 +1685,28 @@ const char *cmd_set_state_map[DSI_CMD_SET_MAX] = {
 	"ROI not parsed from DTSI, generated dynamically",
 	"qcom,mdss-dsi-timing-switch-command-state",
 	"qcom,mdss-dsi-post-mode-switch-on-command-state",
+#if defined(CONFIG_PXLW_IRIS3)
+	"iris,abyp-panel-command-state",
+#endif
+	/* ASUS BSP Display, add for dfps +++ */
+	"qcom,mdss-dsi-on-60-command-state",
+	"qcom,mdss-dsi-60-command-state",
+	"qcom,mdss-dsi-90-command-state",
+	/* ASUS BSP Display, add for dfps --- */
+	/* ASUS BSP Display, add for pr stage +++ */
+	"qcom,mdss-dsi-on-60-pr-command-state",
+	"qcom,mdss-dsi-on-90-pr-command-state",
+	"qcom,mdss-dsi-60-pr-command-state",
+	"qcom,mdss-dsi-90-pr-command-state",
+	/* ASUS BSP Display, add for pr stage --- */
+	/* ASUS BSP Display, add for mp stage +++ */
+	"qcom,mdss-dsi-on-60-mp-command-state",
+	"qcom,mdss-dsi-on-90-mp-command-state",
+	"qcom,mdss-dsi-60-mp-command-state",
+	"qcom,mdss-dsi-90-mp-command-state",
+	/* ASUS BSP Display, add for mp stage --- */
+	"qcom,mdss-dsi-nolp-60-command-state",
+	"qcom,mdss-dsi-lp1-pr-command-state",
 };
 
 static int dsi_panel_get_cmd_pkt_count(const char *data, u32 length, u32 *cnt)
@@ -1922,6 +2094,17 @@ static int dsi_panel_parse_gpios(struct dsi_panel *panel,
 		"qcom,panel-mode-gpio", 0);
 	if (!gpio_is_valid(panel->reset_config.lcd_mode_sel_gpio))
 		pr_debug("%s:%d mode gpio not specified\n", __func__, __LINE__);
+
+#if defined(CONFIG_PXLW_IRIS3)
+	panel->reset_config.abyp_gpio = of_get_named_gpio(of_node,
+		"qcom,platform-analog-bypass-gpio", 0);
+	if (!gpio_is_valid(panel->reset_config.abyp_gpio))
+		pr_debug("%s:%d abyp gpio not specified\n", __func__, __LINE__);
+	panel->reset_config.iris_rst_gpio = of_get_named_gpio(of_node,
+		"qcom,platform-iris-reset-gpio", 0);
+	if (!gpio_is_valid(panel->reset_config.iris_rst_gpio))
+		pr_debug("%s:%d iris reset gpio not specified\n", __func__, __LINE__);
+#endif
 
 	data = of_get_property(of_node,
 		"qcom,mdss-dsi-mode-sel-gpio-state", NULL);
@@ -3416,7 +3599,20 @@ int dsi_panel_update_pps(struct dsi_panel *panel)
 		goto error;
 	}
 
+#if defined(CONFIG_PXLW_IRIS3)
+	pr_info("qcom pps table:\n");
+	print_hex_dump(KERN_INFO, "", DUMP_PREFIX_NONE, 16, 4,
+			set->cmds->msg.tx_buf, set->cmds->msg.tx_len, false);
+#endif
+
+#if defined(CONFIG_PXLW_IRIS3)
+	if (iris3_abypass_mode_get() == PASS_THROUGH_MODE)
+		rc = iris3_panel_cmd_passthrough(panel, &(panel->cur_mode->priv_info->cmd_sets[DSI_CMD_SET_PPS]));
+	else
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_PPS);
+#else
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_PPS);
+#endif
 	if (rc) {
 		pr_err("[%s] failed to send DSI_CMD_SET_PPS cmds, rc=%d\n",
 			panel->name, rc);
@@ -3424,6 +3620,127 @@ int dsi_panel_update_pps(struct dsi_panel *panel)
 
 	dsi_panel_destroy_cmds_packets_buf(set);
 error:
+	mutex_unlock(&panel->panel_lock);
+	return rc;
+}
+
+int dsi_panel_get_osc(struct dsi_panel *panel)
+{
+	int rc = 0;
+	u8 rbuf[112] = {0};
+	u8 osc = 0;
+#if defined(CONFIG_PXLW_IRIS3) && !defined(IRIS3_ABYP_LIGHTUP)
+	char osc_addr[1] = {0xe4};
+	char set_GPARA[2] = {0xF1, 0x69};
+	char selet_bank[2] = {0xB0, 0x04};
+
+
+	struct dsi_cmd_desc selet_bank_cmds = {
+		{0, MIPI_DSI_DCS_SHORT_WRITE_PARAM, 0, 0, 0, sizeof(selet_bank), selet_bank, 0, NULL},
+		0, 1
+	};
+	struct dsi_panel_cmd_set selet_bank_cmdset = {
+		.state = DSI_CMD_SET_STATE_HS,
+		.count = 1,
+		.cmds = &selet_bank_cmds,
+	};
+
+	struct dsi_cmd_desc set_GPARA_cmds = {
+		{0, MIPI_DSI_DCS_SHORT_WRITE_PARAM, 0, 0, 0, sizeof(set_GPARA), set_GPARA, 0, NULL},
+		0, 10
+	};
+	struct dsi_panel_cmd_set set_GPARA_cmdset = {
+		.state = DSI_CMD_SET_STATE_HS,
+		.count = 1,
+		.cmds = &set_GPARA_cmds,
+	};
+
+	struct dsi_cmd_desc read_osc_cmds = {
+		{0, MIPI_DSI_DCS_READ, BIT(6), 0, 0, sizeof(osc_addr), osc_addr, sizeof(rbuf), rbuf},
+		1, 10
+	};
+	struct dsi_panel_cmd_set read_osc_cmdset = {
+		.state = DSI_CMD_SET_STATE_HS,
+		.count = 1,
+		.cmds = &read_osc_cmds,
+	};
+#endif
+	if(readOSC)
+		return -1;
+
+#if defined(CONFIG_PXLW_IRIS3) && !defined(IRIS3_ABYP_LIGHTUP)
+	pr_debug("[Display] iris mode\n");
+
+	rc = iris3_panel_cmd_passthrough(panel, &selet_bank_cmdset);
+	if (rc) {
+		pr_err("[Display] cmd transfer failed, rc=%d\n", rc);
+		return rc;
+	}
+	rc = iris3_panel_cmd_passthrough(panel, &set_GPARA_cmdset);
+	if (rc) {
+		pr_err("[Display] cmd transfer failed, rc=%d\n", rc);
+		return rc;
+	}
+	rc = iris3_panel_cmd_passthrough(panel, &read_osc_cmdset);
+	rc = iris3_panel_cmd_passthrough(panel, &read_osc_cmdset);
+	if (rc){
+ 		pr_err("[Display] cmd transfer failed, rc=%d\n", rc);
+		return rc;
+	}
+#else
+	//rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_PPS);
+#endif
+	osc = ((rbuf[105] & 0x1) << 5) | (rbuf[106] & 0x1F);
+
+	pr_err("p004=%02x, p106=%02x, p107=%02x, osc=%02x\n",
+		rbuf[3], rbuf[105], rbuf[106], osc);
+
+	osc_normal = rbuf[3];
+	osc_alpm = osc;
+	readOSC = true;
+
+	return rc;
+}
+
+int dsi_panel_set_osc(struct dsi_panel *panel, u8 osc)
+{
+	int rc = 0;
+	char selet_bank[2] = {0xB0, 0x04};
+	char set_osc[5] = {0xE4, 0x01, 0x00, 0x00, osc};
+
+	struct dsi_cmd_desc selet_bank_cmds = {
+		{0, MIPI_DSI_DCS_SHORT_WRITE_PARAM, 0, 0, 0, sizeof(selet_bank), selet_bank, 0, NULL},
+		0, 1
+	};
+	struct dsi_panel_cmd_set selet_bank_cmdset = {
+		.state = DSI_CMD_SET_STATE_HS,
+		.count = 1,
+		.cmds = &selet_bank_cmds,
+	};
+	struct dsi_cmd_desc set_osc_cmds = {
+		{0, MIPI_DSI_DCS_LONG_WRITE, 0, 0, 0, sizeof(set_osc), set_osc, 0, NULL},
+		0, 1
+	};
+	struct dsi_panel_cmd_set set_osc_cmdset = {
+		.state = DSI_CMD_SET_STATE_HS,
+		.count = 1,
+		.cmds = &set_osc_cmds,
+	};
+
+
+	if (!panel) {
+		pr_err("invalid params\n");
+		return -EINVAL;
+	}
+	pr_err("osc = %02x\n", osc);
+	rc = iris3_panel_cmd_passthrough(panel, &selet_bank_cmdset);
+	if (rc)
+		pr_err("[%s] failed to send osc cmd, rc=%d\n",
+			panel->name, rc);
+	rc = iris3_panel_cmd_passthrough(panel, &set_osc_cmdset);
+	if (rc)
+		pr_err("[%s] failed to send osc cmd, rc=%d\n",
+			panel->name, rc);	
 	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
@@ -3440,11 +3757,28 @@ int dsi_panel_set_lp1(struct dsi_panel *panel)
 	if (panel->type == EXT_BRIDGE)
 		return 0;
 
+	pr_err("fps(%d)\n", lastFps);
+	dsi_panel_set_osc(panel, osc_alpm);
+
 	mutex_lock(&panel->panel_lock);
-	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_LP1);
+	if (g_ASUS_hwID >= ZS600KL_PR1) {
+#if defined(CONFIG_PXLW_IRIS3) && !defined(IRIS3_ABYP_LIGHTUP)
+		rc = iris3_panel_cmd_passthrough(panel, &(panel->cur_mode->priv_info->cmd_sets[DSI_CMD_SET_LP1_PR]));
+#else
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_LP1_PR);
+#endif
+	} else {
+#if defined(CONFIG_PXLW_IRIS3) && !defined(IRIS3_ABYP_LIGHTUP)
+		rc = iris3_panel_cmd_passthrough(panel, &(panel->cur_mode->priv_info->cmd_sets[DSI_CMD_SET_LP1]));
+#else
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_LP1);
+#endif
+	}
 	if (rc)
 		pr_err("[%s] failed to send DSI_CMD_SET_LP1 cmd, rc=%d\n",
 		       panel->name, rc);
+	
+	fts_ts_suspend();
 	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
@@ -3466,6 +3800,8 @@ int dsi_panel_set_lp2(struct dsi_panel *panel)
 	if (rc)
 		pr_err("[%s] failed to send DSI_CMD_SET_LP2 cmd, rc=%d\n",
 		       panel->name, rc);
+	
+	fts_ts_suspend();
 	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
@@ -3482,11 +3818,29 @@ int dsi_panel_set_nolp(struct dsi_panel *panel)
 	if (panel->type == EXT_BRIDGE)
 		return 0;
 
+	pr_err("fps(%d)\n", lastFps);
+	dsi_panel_set_osc(panel, osc_normal);
+
 	mutex_lock(&panel->panel_lock);
-	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_NOLP);
+	if (lastFps == 60) {
+#if defined(CONFIG_PXLW_IRIS3) && !defined(IRIS3_ABYP_LIGHTUP)
+		rc = iris3_panel_cmd_passthrough(panel, &(panel->cur_mode->priv_info->cmd_sets[DSI_CMD_SET_NOLP_60]));
+#else
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_NOLP_60);
+#endif
+	} else {
+#if defined(CONFIG_PXLW_IRIS3) && !defined(IRIS3_ABYP_LIGHTUP)
+		rc = iris3_panel_cmd_passthrough(panel, &(panel->cur_mode->priv_info->cmd_sets[DSI_CMD_SET_NOLP]));
+#else
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_NOLP);
+#endif
+	}
 	if (rc)
 		pr_err("[%s] failed to send DSI_CMD_SET_NOLP cmd, rc=%d\n",
 		       panel->name, rc);
+	
+	fts_ts_resume();
+	panelOff = false;
 	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
@@ -3633,6 +3987,9 @@ int dsi_panel_send_roi_dcs(struct dsi_panel *panel, int ctrl_idx,
 	mutex_lock(&panel->panel_lock);
 
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_ROI);
+#if defined(CONFIG_PXLW_IRIS3) && !defined(IRIS3_ABYP_LIGHTUP)
+	rc = iris3_panel_cmd_passthrough(panel, &(panel->cur_mode->priv_info->cmd_sets[DSI_CMD_SET_ROI]));
+#endif
 	if (rc)
 		pr_err("[%s] failed to send DSI_CMD_SET_ROI cmds, rc=%d\n",
 				panel->name, rc);
@@ -3690,9 +4047,11 @@ int dsi_panel_post_switch(struct dsi_panel *panel)
 	return rc;
 }
 
-int dsi_panel_enable(struct dsi_panel *panel)
+/* ASUS BSP Display, add for dfps +++ */
+int dsi_panel_asusFps(struct dsi_panel *panel, int type)
 {
 	int rc = 0;
+	enum dsi_cmd_set_type cmd_type;
 
 	if (!panel) {
 		pr_err("Invalid params\n");
@@ -3702,13 +4061,112 @@ int dsi_panel_enable(struct dsi_panel *panel)
 	if (panel->type == EXT_BRIDGE)
 		return 0;
 
+	pr_err("[Display] %s set %d command.\n", __func__, lastFps);
 	mutex_lock(&panel->panel_lock);
 
-	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_ON);
+	if (g_ASUS_hwID == ZS600KL_MP) {
+		if (type == 0)
+			cmd_type = DSI_CMD_SET_90_MP;
+		else
+			cmd_type = DSI_CMD_SET_60_MP;
+	} else if (g_ASUS_hwID == ZS600KL_PR1) {
+		if (type == 0)
+			cmd_type = DSI_CMD_SET_90_PR;
+		else
+			cmd_type = DSI_CMD_SET_60_PR;
+	} else {
+		if (type == 0)
+			cmd_type = DSI_CMD_SET_90;
+		else
+			cmd_type = DSI_CMD_SET_60;
+	}
+
+#if defined(CONFIG_PXLW_IRIS3)
+	if (iris3_abypass_mode_get() == PASS_THROUGH_MODE)
+		rc = iris3_panel_cmd_passthrough(panel, &(panel->cur_mode->priv_info->cmd_sets[cmd_type]));
+	else
+		rc = dsi_panel_tx_cmd_set(panel, cmd_type);
+#else
+		rc = dsi_panel_tx_cmd_set(panel, cmd_type);
+#endif
+
+	if (rc) {
+		pr_err("[%s] failed to send DSI_CMD_SET_ASUS cmds, rc=%d\n",
+			panel->name, rc);
+	}
+
+	mutex_unlock(&panel->panel_lock);
+	return rc;
+}
+/* ASUS BSP Display, add for dfps --- */
+
+int dsi_panel_enable(struct dsi_panel *panel)
+{
+	int rc = 0;
+	/* ASUS BSP Display, add for esd check */
+	struct mipi_dsi_device *dsi;
+	enum dsi_cmd_set_type cmd_type;
+
+	if (!panel) {
+		pr_err("Invalid params\n");
+		return -EINVAL;
+	}
+
+	if (panel->type == EXT_BRIDGE)
+		return 0;
+
+	/* ASUS BSP Display, add for esd check */
+	dsi = &panel->mipi_device;
+
+	mutex_lock(&panel->panel_lock);
+
+	/* ASUS BSP Display, add for dfps +++ */
+	pr_err("[Display] %s  - resume with fps(%d).\n", __func__, lastFps);
+	if (g_ASUS_hwID == ZS600KL_MP) {
+		if (lastFps == 60)
+			cmd_type = DSI_CMD_SET_ON_60_MP;
+		else
+			cmd_type = DSI_CMD_SET_ON_90_MP;
+	} else if (g_ASUS_hwID == ZS600KL_PR1) {
+		if (lastFps == 60)
+			cmd_type = DSI_CMD_SET_ON_60_PR;
+		else
+			cmd_type = DSI_CMD_SET_ON_90_PR;
+	} else {
+		if (lastFps == 60)
+			cmd_type = DSI_CMD_SET_ON_60;
+		else
+			cmd_type = DSI_CMD_SET_ON;
+	}
+
+#if defined(CONFIG_PXLW_IRIS3)
+	if (iris3_abypass_mode_get() == PASS_THROUGH_MODE) {
+		rc = iris3_lightup(panel, NULL);
+		rc = iris3_panel_cmd_passthrough(panel, &(panel->cur_mode->priv_info->cmd_sets[cmd_type]));
+	} else {
+		rc = iris3_abyp_lightup(panel, true);
+		rc = dsi_panel_tx_cmd_set(panel, cmd_type);
+	}
+#else
+	rc = dsi_panel_tx_cmd_set(panel, cmd_type);
+#endif
+	/* ASUS BSP Display, add for dfps --- */
+
 	if (rc) {
 		pr_err("[%s] failed to send DSI_CMD_SET_ON cmds, rc=%d\n",
 		       panel->name, rc);
 	}
+
+	/* ASUS BSP Display, add for esd check +++ */
+	if (esdFail) {
+		pr_err("[Display] set backlight %d after panel dead by ESD check.\n", lastBL);
+		rc = iris3_update_backlight(lastBL);
+		if (rc < 0)
+			pr_err("unable to set backlight\n");
+		esdFail = false;
+	}
+	/* ASUS BSP Display, add for esd check --- */
+
 	panel->panel_initialized = true;
 	mutex_unlock(&panel->panel_lock);
 	return rc;
@@ -3728,7 +4186,14 @@ int dsi_panel_post_enable(struct dsi_panel *panel)
 
 	mutex_lock(&panel->panel_lock);
 
+#if defined(CONFIG_PXLW_IRIS3)
+	if (iris3_abypass_mode_get() == PASS_THROUGH_MODE)
+		rc = iris3_panel_cmd_passthrough(panel, &(panel->cur_mode->priv_info->cmd_sets[DSI_CMD_SET_POST_ON]));
+	else
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_POST_ON);
+#else
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_POST_ON);
+#endif
 	if (rc) {
 		pr_err("[%s] failed to send DSI_CMD_SET_POST_ON cmds, rc=%d\n",
 		       panel->name, rc);
@@ -3781,7 +4246,11 @@ int dsi_panel_disable(struct dsi_panel *panel)
 
 	/* Avoid sending panel off commands when ESD recovery is underway */
 	if (!atomic_read(&panel->esd_recovery_pending)) {
+#if defined(CONFIG_PXLW_IRIS3)
+		rc = iris3_lightoff(panel, &(panel->cur_mode->priv_info->cmd_sets[DSI_CMD_SET_OFF]));
+#else
 		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_OFF);
+#endif
 		if (rc) {
 			pr_err("[%s] failed to send DSI_CMD_SET_OFF cmds, rc=%d\n",
 					panel->name, rc);

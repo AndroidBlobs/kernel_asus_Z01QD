@@ -126,6 +126,10 @@ struct dsi_panel_reset_config {
 	int disp_en_gpio;
 	int lcd_mode_sel_gpio;
 	u32 mode_sel_state;
+#if defined(CONFIG_PXLW_IRIS3)
+	int iris_rst_gpio;
+	int abyp_gpio;
+#endif
 };
 
 enum esd_check_status_mode {
@@ -257,6 +261,10 @@ int dsi_panel_get_dfps_caps(struct dsi_panel *panel,
 
 int dsi_panel_pre_prepare(struct dsi_panel *panel);
 
+int dsi_panel_get_osc(struct dsi_panel *panel);
+
+int dsi_panel_set_osc(struct dsi_panel *panel, u8 osc);
+
 int dsi_panel_set_lp1(struct dsi_panel *panel);
 
 int dsi_panel_set_lp2(struct dsi_panel *panel);
@@ -264,6 +272,9 @@ int dsi_panel_set_lp2(struct dsi_panel *panel);
 int dsi_panel_set_nolp(struct dsi_panel *panel);
 
 int dsi_panel_prepare(struct dsi_panel *panel);
+
+/* ASUS BSP Display, add for dfps */
+int dsi_panel_asusFps(struct dsi_panel *panel, int type);
 
 int dsi_panel_enable(struct dsi_panel *panel);
 

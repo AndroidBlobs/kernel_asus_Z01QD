@@ -158,6 +158,10 @@ static u32 dp_aux_write(struct dp_aux_private *aux,
 	return len;
 }
 
+//ASUS_BSP+++
+extern bool dp_sleep_in_station;
+extern int dp_aux_retry_count;
+//ASUS_BSP---
 static int dp_aux_cmd_fifo_tx(struct dp_aux_private *aux,
 		struct drm_dp_aux_msg *msg)
 {
@@ -183,6 +187,12 @@ static int dp_aux_cmd_fifo_tx(struct dp_aux_private *aux,
 	} else {
 		pr_err_ratelimited("aux err: %s\n",
 			dp_aux_get_error(aux->aux_error_num));
+        //ASUS_BSP+++
+        if ((dp_aux_retry_count ++ > 8) && dp_sleep_in_station) {
+            atomic_set(&aux->aborted, 1);
+            pr_err("[DP] aux error count = %d, abort dp aux process\n", dp_aux_retry_count);
+        }
+        //ASUS_BSP---
 
 		ret = -EINVAL;
 	}

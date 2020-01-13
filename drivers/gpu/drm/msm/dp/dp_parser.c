@@ -223,6 +223,7 @@ static int dp_parser_gpio(struct dp_parser *parser)
 	struct device_node *of_node = dev->of_node;
 	struct dss_module_power *mp = &parser->mp[DP_CORE_PM];
 	static const char * const dp_gpios[] = {
+		"qcom,sbu-en-gpio", /* ASUS BSP Display +++ */
 		"qcom,aux-en-gpio",
 		"qcom,aux-sel-gpio",
 		"qcom,usbplug-cc-gpio",

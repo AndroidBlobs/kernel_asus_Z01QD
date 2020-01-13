@@ -485,6 +485,8 @@ static u64 _sde_core_perf_get_core_clk_rate(struct sde_kms *kms)
 
 			clk_rate = max(tmp_rate, clk_rate);
 
+            clk_rate = clk_rate * 110 / 100; //ASUS: level up clk rate at 90fps, do not do this at 60fps
+
 			clk_rate = clk_round_rate(kms->perf.core_clk, clk_rate);
 		}
 	}

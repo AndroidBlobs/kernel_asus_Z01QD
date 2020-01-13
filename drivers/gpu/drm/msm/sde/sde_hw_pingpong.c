@@ -42,7 +42,11 @@
 
 #define DITHER_DEPTH_MAP_INDEX 9
 static u32 dither_depth_map[DITHER_DEPTH_MAP_INDEX] = {
+#if defined(CONFIG_PXLW_IRIS3)
+	0, 0, 0, 0, 0, 1, 2, 3, 2
+#else
 	0, 0, 0, 0, 0, 1, 2, 3, 3
+#endif
 };
 
 static struct sde_pingpong_cfg *_pingpong_offset(enum sde_pingpong pp,

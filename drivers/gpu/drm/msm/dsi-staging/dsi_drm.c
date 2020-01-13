@@ -21,9 +21,11 @@
 #include "sde_connector.h"
 #include "dsi_drm.h"
 #include "sde_trace.h"
+#include "sde_encoder.h"
 
 #define to_dsi_bridge(x)     container_of((x), struct dsi_bridge, base)
 #define to_dsi_state(x)      container_of((x), struct dsi_connector_state, base)
+extern int fts_ts_resume(void);
 
 static void convert_to_dsi_mode(const struct drm_display_mode *drm_mode,
 				struct dsi_display_mode *dsi_mode)
@@ -136,10 +138,42 @@ static int dsi_bridge_attach(struct drm_bridge *bridge)
 
 }
 
+/* ASUS BSP Display, add for dfps +++ */
+static void dsi_bridge_asusFps(struct drm_bridge *bridge, int type)
+{
+	int rc = 0;
+	struct dsi_bridge *c_bridge = to_dsi_bridge(bridge);
+	struct drm_encoder * drm_enc = NULL;
+
+	drm_enc = c_bridge->base.encoder;
+
+	if (!bridge) {
+		pr_err("Invalid params\n");
+		return;
+	}
+
+	/* ASUS Display BSP, Add protection for dfps +++ */
+	sde_encoder_rc_lock(drm_enc);
+	// sde_encoder_wait_for_idle(drm_enc);
+	rc = dsi_display_asusFps(c_bridge->display, type);
+	sde_encoder_rc_unlock(drm_enc);
+	/* ASUS Display BSP, Add protection for dfps --- */
+	if (rc) {
+		pr_err("[%d] failed to perform a fps set, rc=%d\n",
+			c_bridge->id, rc);
+		return;
+	}
+}
+/* ASUS BSP Display, add for dfps --- */
+bool dsi_on = false;
+
 static void dsi_bridge_pre_enable(struct drm_bridge *bridge)
 {
 	int rc = 0;
 	struct dsi_bridge *c_bridge = to_dsi_bridge(bridge);
+
+    if (dsi_on)
+        return;
 
 	if (!bridge) {
 		pr_err("Invalid params\n");
@@ -187,7 +221,8 @@ static void dsi_bridge_pre_enable(struct drm_bridge *bridge)
 	}
 	SDE_ATRACE_END("dsi_display_enable");
 	SDE_ATRACE_END("dsi_bridge_pre_enable");
-
+	
+	fts_ts_resume();
 	rc = dsi_display_splash_res_cleanup(c_bridge->display);
 	if (rc)
 		pr_err("Continuous splash pipeline cleanup failed, rc=%d\n",
@@ -199,6 +234,9 @@ static void dsi_bridge_enable(struct drm_bridge *bridge)
 	int rc = 0;
 	struct dsi_bridge *c_bridge = to_dsi_bridge(bridge);
 	struct dsi_display *display;
+
+    if (dsi_on)
+        return;
 
 	if (!bridge) {
 		pr_err("Invalid params\n");
@@ -219,6 +257,7 @@ static void dsi_bridge_enable(struct drm_bridge *bridge)
 
 	if (display && display->drm_conn)
 		sde_connector_helper_bridge_enable(display->drm_conn);
+    dsi_on = true;
 }
 
 static void dsi_bridge_disable(struct drm_bridge *bridge)
@@ -226,6 +265,9 @@ static void dsi_bridge_disable(struct drm_bridge *bridge)
 	int rc = 0;
 	struct dsi_display *display;
 	struct dsi_bridge *c_bridge = to_dsi_bridge(bridge);
+
+    if (!dsi_on)
+        return;
 
 	if (!bridge) {
 		pr_err("Invalid params\n");
@@ -247,6 +289,9 @@ static void dsi_bridge_post_disable(struct drm_bridge *bridge)
 {
 	int rc = 0;
 	struct dsi_bridge *c_bridge = to_dsi_bridge(bridge);
+
+    if (!dsi_on)
+        return;
 
 	if (!bridge) {
 		pr_err("Invalid params\n");
@@ -272,6 +317,7 @@ static void dsi_bridge_post_disable(struct drm_bridge *bridge)
 		return;
 	}
 	SDE_ATRACE_END("dsi_bridge_post_disable");
+    dsi_on = false;
 }
 
 static void dsi_bridge_mode_set(struct drm_bridge *bridge,
@@ -483,6 +529,8 @@ static const struct drm_bridge_funcs dsi_bridge_ops = {
 	.disable      = dsi_bridge_disable,
 	.post_disable = dsi_bridge_post_disable,
 	.mode_set     = dsi_bridge_mode_set,
+	/* ASUS BSP Display, add for dfps */
+	.asusFps      = dsi_bridge_asusFps,
 };
 
 int dsi_conn_set_info_blob(struct drm_connector *connector,

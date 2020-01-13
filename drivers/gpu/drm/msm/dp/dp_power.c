@@ -374,6 +374,8 @@ static void dp_power_set_gpio(struct dp_power_private *power, bool flip)
 			    dp_power_find_gpio(config->gpio_name, "aux-sel"))
 				gpio_direction_output(config->gpio,
 					config->value);
+			else if (dp_power_find_gpio(config->gpio_name, "sbu-en"))
+				gpio_direction_output(config->gpio, 1); // ASUS BSP Display +++
 			else
 				gpio_set_value(config->gpio, config->value);
 

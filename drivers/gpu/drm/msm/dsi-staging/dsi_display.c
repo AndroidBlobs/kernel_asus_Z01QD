@@ -31,6 +31,27 @@
 #include "dsi_clk.h"
 #include "dsi_pwr.h"
 #include "sde_dbg.h"
+#if defined(CONFIG_PXLW_IRIS3)
+#include "dsi_iris3_api.h"
+#include "dsi_iris3_lightup.h"
+#include "dsi_iris3_lp.h"
+#endif
+#include <linux/proc_fs.h> //ASUS_BSP+++ read lcd unique id for factory
+//ASUS BSP Display +++
+#include <linux/string.h>
+#include <linux/syscalls.h>
+//ASUS BSP Display ---
+#include <linux/workqueue.h>
+
+extern volatile enum POGO_ID ASUS_POGO_ID;
+enum POGO_ID {
+	ERROR1 = 0,
+	NO_INSERT,
+	INBOX,
+	DT,
+	STATION,
+	OTHER,
+};
 
 #define to_dsi_display(x) container_of(x, struct dsi_display, host)
 #define INT_BASE_10 10
@@ -55,6 +76,43 @@ static const struct of_device_id dsi_display_dt_match[] = {
 	{.compatible = "qcom,dsi-display"},
 	{}
 };
+
+extern char g_panel_unique_id[8]; //ASUS_BSP+++ read lcd unique id for factory
+//ASUS BSP Display, Panel debug control interface +++
+#define LCD_REGISTER_RW         "driver/panel_reg_rw"
+#define HBM_MODE                "hbm_mode"
+#define ASUS_DFPS               "asus_dfps"
+#define ALPM_MODE               "alpm_mode"
+#define SET_DIMMING_MODE        "set_dimming"
+
+void get_tcon_cmd(char cmd, int rlen);
+void set_tcon_cmd(char *cmd, short len, int type);
+static void set_hbm_mode(int mode, int type);
+static void set_dimming_mode(int mode);
+static struct mutex cmd_mutex;
+struct dsi_display *g_display;
+char g_reg_buffer[256];
+int g_hbm_mode = 0;
+int g_alpm_mode = 0;
+bool g_enter_AOD = false;
+int g_iris_cur_mode = 0;
+extern int lastFps;
+extern bool panelOff;
+int g_alpm_bl = 448;
+//ASUS BSP Display, Panel debug control interface ---
+/* ASUS BSP Display, add for esd check */
+bool esdFail = false;
+
+extern struct completion stn_dp_comp;
+struct asus_station stn;
+struct delayed_work blwk;
+extern int lastBL;
+extern bool panelOff;
+extern bool g_hpd;
+bool gAODBL = false;
+int g_set_dimming_mode = 0;
+bool g_lock_bl_level = false;
+extern enum DEVICE_HWID g_ASUS_hwID;
 
 static struct dsi_display *primary_display;
 static struct dsi_display *secondary_display;
@@ -136,6 +194,22 @@ void dsi_rect_intersect(const struct dsi_rect *r1,
 	}
 }
 
+void dsi_display_cb_register(
+	void (*set_stn_bl)(int),
+	void (*set_stn_init_bl)(void),
+	void (*stn_suspend)(void),
+	void (*stn_resume)(void),
+	void (*set_stn_hbm)(int),
+	void (*set_power_off)(void)) {
+	stn.set_bl              = set_stn_bl;
+	stn.set_init_bl         = set_stn_init_bl;
+	stn.suspend             = stn_suspend;
+	stn.resume              = stn_resume;
+	stn.set_hbm             = set_stn_hbm;
+	stn.power_off             = set_power_off;
+}
+EXPORT_SYMBOL(dsi_display_cb_register);
+
 int dsi_display_set_backlight(void *display, u32 bl_lvl)
 {
 	struct dsi_display *dsi_display = display;
@@ -179,6 +253,11 @@ int dsi_display_set_backlight(void *display, u32 bl_lvl)
 	if (rc)
 		pr_err("unable to set backlight\n");
 
+	// ASUS_BSP: sync station backlight value
+	if(stn.set_bl && ASUS_POGO_ID == STATION)
+		stn.set_bl((int)bl_temp);
+
+	mdelay(10); //ASUS_BSP, to have more smooth backlight adjustment
 	rc = dsi_display_clk_ctrl(dsi_display->dsi_clk_handle,
 			DSI_CORE_CLK, DSI_CLK_OFF);
 	if (rc) {
@@ -439,7 +518,11 @@ static int dsi_host_alloc_cmd_tx_buffer(struct dsi_display *display)
 
 	mutex_lock(&display->drm_dev->struct_mutex);
 	display->tx_cmd_buf = msm_gem_new(display->drm_dev,
+#if defined(CONFIG_PXLW_IRIS3)
+			SZ_256K,
+#else
 			SZ_4K,
+#endif
 			MSM_BO_UNCACHED);
 	mutex_unlock(&display->drm_dev->struct_mutex);
 
@@ -449,7 +532,11 @@ static int dsi_host_alloc_cmd_tx_buffer(struct dsi_display *display)
 		goto error;
 	}
 
+#if defined(CONFIG_PXLW_IRIS3)
+	display->cmd_buffer_size = SZ_256K;
+#else
 	display->cmd_buffer_size = SZ_4K;
+#endif
 
 	display->aspace = msm_gem_smmu_address_space_get(
 			display->drm_dev, MSM_SMMU_DOMAIN_UNSECURE);
@@ -483,7 +570,11 @@ static int dsi_host_alloc_cmd_tx_buffer(struct dsi_display *display)
 
 	for (cnt = 0; cnt < display->ctrl_count; cnt++) {
 		display_ctrl = &display->ctrl[cnt];
+#if defined(CONFIG_PXLW_IRIS3)
+		display_ctrl->ctrl->cmd_buffer_size = SZ_256K;
+#else
 		display_ctrl->ctrl->cmd_buffer_size = SZ_4K;
+#endif
 		display_ctrl->ctrl->cmd_buffer_iova =
 					display->cmd_buffer_iova;
 		display_ctrl->ctrl->vaddr = display->vaddr;
@@ -671,6 +762,8 @@ static int dsi_display_status_reg_read(struct dsi_display *display)
 	if (rc <= 0) {
 		pr_err("[%s] read status failed on master,rc=%d\n",
 		       display->name, rc);
+		/* ASUS BSP Display, add for esd check */
+		esdFail = true;
 		goto exit;
 	}
 
@@ -716,6 +809,8 @@ static int dsi_display_status_check_te(struct dsi_display *display)
 	if (!wait_for_completion_timeout(&display->esd_te_gate,
 				esd_te_timeout)) {
 		pr_err("TE check failed\n");
+		/* ASUS BSP Display, add for esd check */
+		esdFail = true;
 		rc = -EINVAL;
 	}
 
@@ -968,11 +1063,20 @@ static bool dsi_display_get_cont_splash_status(struct dsi_display *display)
 	return true;
 }
 
+void set_bl_work(struct work_struct *work){
+	if(!panelOff)
+		dsi_panel_set_backlight(g_display->panel, lastBL);
+}
+
+extern uint8_t iris_get_mode (void);
 int dsi_display_set_power(struct drm_connector *connector,
 		int power_mode, void *disp)
 {
 	struct dsi_display *display = disp;
+	struct iris_cfg *pcfg = NULL;
 	int rc = 0;
+
+	pcfg = iris_get_cfg();
 
 	if (!display || !display->panel) {
 		pr_err("invalid display/panel\n");
@@ -981,13 +1085,44 @@ int dsi_display_set_power(struct drm_connector *connector,
 
 	switch (power_mode) {
 	case SDE_MODE_DPMS_LP1:
-		rc = dsi_panel_set_lp1(display->panel);
+		if(!g_enter_AOD) {
+			set_dimming_mode(0);
+
+			g_iris_cur_mode = pcfg->abypss_ctrl.abypass_mode;
+			if(pcfg->abypss_ctrl.abypass_mode == ANALOG_BYPASS_MODE) {
+				iris_abypass_switch_proc(display, PASS_THROUGH_MODE, false);
+			}
+
+			dsi_panel_get_osc(display->panel);
+			rc = dsi_panel_set_lp1(display->panel);
+			set_hbm_mode(0, 1);
+
+			cancel_delayed_work_sync(&blwk);
+
+			if (g_alpm_mode == 0)
+				g_alpm_bl = 448;
+			//dsi_panel_set_backlight(display->panel, g_alpm_bl);
+
+			iris_abypass_switch_proc(display, ANALOG_BYPASS_MODE, false);
+			mdelay(50);
+			get_tcon_cmd(0x0A, 1);
+			g_enter_AOD = true;
+		}
+		dsi_panel_set_backlight(display->panel, g_alpm_bl);
 		break;
 	case SDE_MODE_DPMS_LP2:
 		rc = dsi_panel_set_lp2(display->panel);
 		break;
 	default:
-		rc = dsi_panel_set_nolp(display->panel);
+		if(g_enter_AOD) {
+			g_alpm_mode = 0;
+			gAODBL = true;
+
+			if(g_iris_cur_mode == PASS_THROUGH_MODE)
+				iris_abypass_switch_proc(display, PASS_THROUGH_MODE, false);
+
+			g_enter_AOD = false;
+		}
 		break;
 	}
 	return rc;
@@ -2845,9 +2980,18 @@ static ssize_t dsi_host_transfer(struct mipi_dsi_host *host,
 		int ctrl_idx = (msg->flags & MIPI_DSI_MSG_UNICAST) ?
 				msg->ctrl : 0;
 
+#if defined(CONFIG_PXLW_IRIS3)
+		u32 flags = DSI_CTRL_CMD_FETCH_MEMORY;
+		if (msg->rx_buf && msg->rx_len)
+			flags |= DSI_CTRL_CMD_READ;
+		rc = dsi_ctrl_cmd_transfer(display->ctrl[ctrl_idx].ctrl, msg,
+					  flags);
+		if (rc < 0) {
+#else
 		rc = dsi_ctrl_cmd_transfer(display->ctrl[ctrl_idx].ctrl, msg,
 					  DSI_CTRL_CMD_FETCH_MEMORY);
 		if (rc) {
+#endif
 			pr_err("[%s] cmd transfer failed, rc=%d\n",
 			       display->name, rc);
 			goto error_disable_cmd_engine;
@@ -3554,6 +3698,10 @@ static int dsi_display_res_init(struct dsi_display *display)
 		display->panel = NULL;
 		goto error_ctrl_put;
 	}
+#if defined(CONFIG_PXLW_IRIS3)
+	iris3_parse_params(display->panel_of, display->panel);
+	iris3_init(display, display->panel);
+#endif
 
 	rc = dsi_display_parse_lane_map(display);
 	if (rc) {
@@ -4515,6 +4663,771 @@ int dsi_display_splash_res_cleanup(struct  dsi_display *display)
 	return rc;
 }
 
+//ASUS_BSP+++ read lcd unique id for factory
+static ssize_t unique_id_proc_read(struct file *file, char __user *buf,
+                    size_t count, loff_t *ppos)
+{
+        int len = 0;
+        ssize_t ret = 0;
+        char *buff;
+
+        buff = kmalloc(100, GFP_KERNEL);
+        if (!buff)
+            return -ENOMEM;
+
+            len += sprintf(buff, "%s\n", g_panel_unique_id);
+
+        ret = simple_read_from_buffer(buf, count, ppos, buff, len);
+        kfree(buff);
+
+        return ret;
+}
+
+static struct file_operations lcd_uniqueID_proc_ops = {
+    .read = unique_id_proc_read,
+};
+//ASUS_BSP--- read lcd unique id for factory
+
+// ASUS BSP Display, panel register read/write +++
+void set_tcon_cmd(char *cmd, short len, int type)
+{
+    int i = 0, rc = 0;
+    struct iris_cfg *pcfg = NULL;
+    struct dsi_cmd_desc cmds;
+    struct dsi_panel_cmd_set cmdset = {
+        .state = DSI_CMD_SET_STATE_HS,
+        .count = 1,
+        .cmds = &cmds,
+    };
+	struct mipi_dsi_msg tcon_cmd = {0, 0x15, 0, 0, 0, len, cmd, 0, NULL};
+
+    struct dsi_display_ctrl *mctrl;
+    struct dsi_panel *panel;
+
+    for(i=0; i<1/*len*/; i++)
+		pr_info("[Display] cmd%d (0x%02x)\n", i, cmd[i]);
+
+    if(len > 2)
+        tcon_cmd.type = 0x39;
+
+    mctrl = &g_display->ctrl[g_display->cmd_master_idx];
+    pcfg = iris_get_cfg();
+
+    if (!g_display->panel || !mctrl || !mctrl->ctrl || !pcfg)
+        return;
+
+    panel = pcfg->panel;
+
+	if (g_display->ctrl[0].ctrl->current_state.controller_state == DSI_CTRL_ENGINE_ON  && (!panelOff || type)) {
+        mutex_lock(&cmd_mutex);
+        dsi_display_clk_ctrl(g_display->dsi_clk_handle, DSI_ALL_CLKS, DSI_CLK_ON);
+
+        if (g_display->tx_cmd_buf == NULL) {
+            rc = dsi_host_alloc_cmd_tx_buffer(g_display);
+            if (rc) {
+                pr_err("[Display] failed to allocate cmd tx buffer memory (%d)\n", rc);
+                goto error_disable_clks;
+            }
+        }
+
+        rc = dsi_display_cmd_engine_enable(g_display);
+        if (rc) {
+             pr_err("[Display] cmd engine enable failed(%d)\n", rc);
+             goto error_disable_clks;
+        }
+
+        cmds.msg = tcon_cmd;
+        if (pcfg->abypss_ctrl.abypass_mode == PASS_THROUGH_MODE) {
+			pr_debug("[Display] iris mode\n");
+            rc = iris3_panel_cmd_passthrough(panel, &cmdset);
+        } else {
+			pr_debug("[Display] iris bypass mode\n");
+            cmds.last_command = 1;
+            cmds.post_wait_ms = 1;
+            if (cmds.last_command) {
+                cmds.msg.flags |= MIPI_DSI_MSG_LASTCOMMAND;
+            }
+
+            rc = dsi_ctrl_cmd_transfer(mctrl->ctrl, &cmds.msg, DSI_CTRL_CMD_FETCH_MEMORY);
+        }
+
+        if (rc)
+			pr_err("[Display] cmd transfer failed, rc=%d\n", rc);
+
+        dsi_display_cmd_engine_disable(g_display);
+        dsi_display_clk_ctrl(g_display->dsi_clk_handle,DSI_ALL_CLKS, DSI_CLK_OFF);
+        mutex_unlock(&cmd_mutex);
+        return;
+    } else {
+        pr_err("[Display] %s: panel is off\n", __func__);
+        return;
+    }
+
+error_disable_clks:
+    dsi_display_clk_ctrl(g_display->dsi_clk_handle,DSI_ALL_CLKS, DSI_CLK_OFF);
+    mutex_unlock(&cmd_mutex);
+}
+
+void get_tcon_cmd(char cmd, int rlen)
+{
+    char tmp[256];
+    u32 flags = 0;
+    int i = 0, rc = 0, start = 0;
+    u8 *tx_buf, *return_buf, *status_buf;
+
+    struct dsi_cmd_desc cmds;
+    struct mipi_dsi_msg tcon_cmd = {
+         .channel = 0, 
+         .type = 0x06,
+         .flags = 0,
+         .ctrl = 0, 
+         .wait_ms = 0,
+         .tx_len = sizeof(cmd),
+         .tx_buf = NULL,
+         .rx_len = rlen,
+         .rx_buf = NULL,
+    };
+    struct dsi_display_ctrl *mctrl;
+
+    mctrl = &g_display->ctrl[g_display->cmd_master_idx];
+
+    if (!g_display->panel || !mctrl || !mctrl->ctrl)
+        return;
+
+    if (g_display->ctrl[0].ctrl->current_state.controller_state == DSI_CTRL_ENGINE_ON) {
+        mutex_lock(&cmd_mutex);
+        dsi_display_clk_ctrl(g_display->dsi_clk_handle, DSI_ALL_CLKS, DSI_CLK_ON);
+
+        if (g_display->tx_cmd_buf == NULL) {
+            rc = dsi_host_alloc_cmd_tx_buffer(g_display);
+            if (rc) {
+                pr_err("[Display] failed to allocate cmd tx buffer memory (%d)\n", rc);
+                goto error_disable_clks;
+            }
+        }
+
+        rc = dsi_display_cmd_engine_enable(g_display);
+        if (rc) {
+             pr_err("[Display]cmd engine enable failed(%d)\n", rc);
+             goto error_disable_clks;
+        }
+
+        tx_buf = &cmd;
+        return_buf = kcalloc(rlen, sizeof(unsigned char), GFP_KERNEL);
+        status_buf = kzalloc(SZ_4K, GFP_KERNEL);
+        memset(status_buf, 0x0, SZ_4K);
+
+        cmds.msg = tcon_cmd;
+        cmds.last_command = 1;
+        cmds.post_wait_ms = 0;
+        if (cmds.last_command) {
+            cmds.msg.flags |= MIPI_DSI_MSG_LASTCOMMAND;
+            flags |= DSI_CTRL_CMD_LAST_COMMAND;
+        }
+        flags |= (DSI_CTRL_CMD_FETCH_MEMORY | DSI_CTRL_CMD_READ);
+
+        cmds.msg.tx_buf = tx_buf;
+        cmds.msg.rx_buf = status_buf;
+        cmds.msg.rx_len = rlen;
+        memset(g_reg_buffer, 0, 256*sizeof(char));
+
+        rc = dsi_ctrl_cmd_transfer(mctrl->ctrl, &cmds.msg, flags);
+        if (rc <= 0) {
+            pr_err("[Display] rx cmd transfer failed rc=%d\n", rc);
+        } else {
+            pr_err("[Display] rx cmd transfer succeed rc=%d\n", rc);
+            memcpy(return_buf + start, status_buf, rlen);
+            start += rlen;
+
+            for(i=0; i<rlen; i++) {
+                memset(tmp, 0, 256*sizeof(char));
+                pr_err("[Display] read parameter: 0x%02x = 0x%02x\n", cmd, return_buf[i]);
+                snprintf(tmp, sizeof(tmp), "0x%02x = 0x%02x\n", cmd, return_buf[i]);
+                strcat(g_reg_buffer,tmp);
+            }
+        }
+
+        dsi_display_cmd_engine_disable(g_display);
+        dsi_display_clk_ctrl(g_display->dsi_clk_handle,DSI_ALL_CLKS, DSI_CLK_OFF);
+        mutex_unlock(&cmd_mutex);
+        return;
+    } else {
+        pr_err("[Display] %s: panel is off\n", __func__);
+        return;
+    }
+
+error_disable_clks:
+    dsi_display_clk_ctrl(g_display->dsi_clk_handle,DSI_ALL_CLKS, DSI_CLK_OFF);
+    mutex_unlock(&cmd_mutex);
+}
+
+#define MIN_LEN 2
+#define MAX_LEN 4
+
+static ssize_t lcd_reg_rw(struct file *filp, const char *buff, size_t len, loff_t *off)
+{
+    char *messages, *tmp, *cur;
+    char *token, *token_par;
+    char *put_cmd;
+    bool flag = 0;
+    int *store;
+    int i = 0, cnt = 0, cmd_cnt = 0;
+    int ret = 0;
+    uint8_t str_len = 0;
+
+    messages = (char*) kmalloc(len*sizeof(char), GFP_KERNEL);
+    if(!messages)
+        return -EFAULT;
+
+    tmp = (char*) kmalloc(len*sizeof(char), GFP_KERNEL);
+    memset(tmp, 0, len*sizeof(char));
+    store =  (int*) kmalloc((len/MIN_LEN)*sizeof(int), GFP_KERNEL);
+    put_cmd = (char*) kmalloc((len/MIN_LEN)*sizeof(char), GFP_KERNEL);
+    memset(g_reg_buffer, 0, 256*sizeof(char));
+
+    if (copy_from_user(messages, buff, len)) {
+        ret = -1;
+        goto error;
+    }
+    cur = messages;
+    *(cur+len-1) = '\0';
+
+    pr_err("[Display] %s (%s) +++\n", __func__, cur);
+
+    if (strncmp(cur, "w", 1) == 0) //write
+        flag = true;
+    else if(strncmp(cur, "r", 1) == 0) //read
+        flag = false;
+    else {
+        ret = -1;
+        goto error;
+    }
+
+    while ((token = strsep(&cur, "wr")) != NULL) {
+        str_len = strlen(token);
+
+        if(str_len > 0) { /*filter zero length*/
+            if(!(strncmp(token, ",", 1) == 0) || (str_len < MAX_LEN)) {
+                ret = -1;
+                goto error;
+            }
+
+            memset(store, 0, (len/MIN_LEN)*sizeof(int));
+            memset(put_cmd, 0, (len/MIN_LEN)*sizeof(char));
+            cmd_cnt++;
+
+            while ((token_par = strsep(&token, ",")) != NULL) {
+                if(strlen(token_par) > MIN_LEN) {
+                    ret = -1;
+                    goto error;
+                }
+                if(strlen(token_par)) {
+                    sscanf(token_par, "%x", &(store[cnt]));
+                    cnt++;
+                }
+            }
+
+            for(i=0; i<cnt; i++)
+                put_cmd[i] = store[i]&0xff;
+
+            if(flag) {
+                pr_err("[Display] write panel command\n");
+				set_tcon_cmd(put_cmd, cnt, 0);
+            }
+            else {
+                pr_err("[Display] read panel command\n");
+                get_tcon_cmd(put_cmd[0], store[1]);
+            }
+
+            if(cur != NULL) {
+                if (*(tmp+str_len) == 'w')
+                    flag = true;
+                else if (*(tmp+str_len) == 'r')
+                    flag = false;
+            }
+            cnt = 0;
+        }
+
+        memset(tmp, 0, len*sizeof(char));
+
+        if(cur != NULL)
+            strcpy(tmp, cur);
+    }
+
+    if(cmd_cnt == 0) {
+        ret = -1;
+        goto error;
+    }
+
+    ret = len;
+
+error:
+    pr_err("[Display] %s(%d) ---\n", __func__, ret);
+    kfree(messages);
+    kfree(tmp);
+    kfree(store);
+    kfree(put_cmd);
+    return ret;
+}
+
+static ssize_t lcd_reg_read(struct file *file, char __user *buf,
+                    size_t count, loff_t *ppos)
+{
+    int len = 0;
+    ssize_t ret = 0;
+    char *buff;
+
+    buff = kmalloc(100, GFP_KERNEL);
+    if (!buff)
+        return -ENOMEM;
+    len += sprintf(buff, "%s\n", g_reg_buffer);
+    ret = simple_read_from_buffer(buf, count, ppos, buff, len);
+    kfree(buff);
+
+    return ret;
+}
+
+static struct file_operations lcd_reg_rw_ops = {
+    .write = lcd_reg_rw,
+    .read = lcd_reg_read,
+};
+// ASUS BSP Display, panel register read/write ---
+
+/* ASUS BSP Display, for change dimming +++ */
+int last_bl;
+static void set_dimming_mode(int mode)
+{
+	int fixed_bl = 2368;
+	static char bank_cmd[2] = {0xB0, 0x00};
+	static char defaultCF_ER_cmd90[134] = {
+								0xCF, 0x64, 0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+								0x00, 0x0c, 0x81, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
+								0x02, 0x02, 0x02, 0x03, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00,
+								0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+								0x00, 0x00, 0x00, 0x03, 0xFF, 0x03, 0x1F, 0x03, 0xFF, 0x00,
+								0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+								0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0xFF, 0x03,
+								0x1F, 0x03, 0xFF, 0x01, 0x1A, 0x01, 0x1A, 0x01, 0x1A, 0x01,
+								0x1A, 0x01, 0x1A, 0x01, 0x1A, 0x01, 0x1A, 0x01, 0x1A, 0x01,
+								0x1A, 0x01, 0x1A, 0x01, 0x1A, 0x01, 0x1A, 0x1A, 0x1A, 0x1A,
+								0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x09,
+								0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09,
+								0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09,
+								0x9A, 0x09, 0x9A, 0x19};
+	static char defaultCF_ER_cmd60[134] = {
+								0xCF, 0x64, 0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+								0x00, 0x0c, 0x81, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04,
+								0x04, 0x04, 0x04, 0x05, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00,
+								0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+								0x00, 0x00, 0x00, 0x03, 0xFF, 0x03, 0x1F, 0x03, 0xFF, 0x00,
+								0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+								0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0xFF, 0x03,
+								0x1F, 0x03, 0xFF, 0x01, 0x1A, 0x01, 0x1A, 0x01, 0x1A, 0x01,
+								0x1A, 0x01, 0x1A, 0x01, 0x1A, 0x01, 0x1A, 0x01, 0x1A, 0x01,
+								0x1A, 0x01, 0x1A, 0x01, 0x1A, 0x01, 0x1A, 0x1A, 0x1A, 0x1A,
+								0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x09,
+								0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09,
+								0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09,
+								0x9A, 0x09, 0x9A, 0x19};
+	static char defaultCF_PR_cmd90[134] = {
+								0xCF, 0x64, 0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03,
+								0x20, 0x0C, 0x81, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
+								0x02, 0x02, 0x02, 0x02, 0x03, 0x00, 0xFF, 0x00, 0xFF, 0x00,
+								0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00,
+								0xFF, 0x00, 0xFF, 0x03, 0xFF, 0x03, 0xFF, 0x03, 0xFF, 0x00,
+								0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00,
+								0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x03, 0xFF, 0x03,
+								0xFF, 0x03, 0xFF, 0x01, 0x1A, 0x01, 0x1A, 0x01, 0x1A, 0x01,
+								0x1A, 0x01, 0x1A, 0x01, 0x1A, 0x01, 0x1A, 0x01, 0x1A, 0x01,
+								0x1A, 0x01, 0x1A, 0x01, 0x1A, 0x01, 0x1A, 0x1C, 0x1C, 0x1C,
+								0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x09,
+								0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09,
+								0x9A, 0x00, 0x00, 0x09, 0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09,
+								0x9A, 0x09, 0x9A, 0x19};
+	static char defaultCF_PR_cmd60[134] = {
+								0xCF, 0x64, 0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03,
+								0x20, 0x0C, 0x81, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04,
+								0x04, 0x04, 0x04, 0x04, 0x05, 0x00, 0xFF, 0x00, 0xFF, 0x00,
+								0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00,
+								0xFF, 0x00, 0xFF, 0x03, 0xFF, 0x03, 0xFF, 0x03, 0xFF, 0x00,
+								0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00,
+								0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x03, 0xFF, 0x03,
+								0xFF, 0x03, 0xFF, 0x01, 0x35, 0x01, 0x35, 0x01, 0x35, 0x01,
+								0x35, 0x01, 0x35, 0x01, 0x35, 0x01, 0x35, 0x01, 0x35, 0x01,
+								0x35, 0x01, 0x35, 0x01, 0x35, 0x01, 0x35, 0x1C, 0x1C, 0x1C,
+								0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x09,
+								0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09,
+								0x9A, 0x00, 0x00, 0x09, 0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09,
+								0x9A, 0x09, 0x9A, 0x19};
+	static char defaultCF_MP_cmd90[134] = {
+								0xCF, 0x64, 0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03,
+								0x20, 0x0C, 0x81, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
+								0x02, 0x02, 0x02, 0x02, 0x03, 0x00, 0xFF, 0x00, 0xFF, 0x00,
+								0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00,
+								0xFF, 0x00, 0xFF, 0x03, 0xFF, 0x03, 0xFF, 0x03, 0xFF, 0x00,
+								0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00,
+								0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x03, 0xFF, 0x03,
+								0xFF, 0x03, 0xFF, 0x01, 0x35, 0x01, 0x35, 0x01, 0x35, 0x01,
+								0x35, 0x01, 0x35, 0x01, 0x35, 0x01, 0x35, 0x01, 0x35, 0x01,
+								0x35, 0x01, 0x35, 0x01, 0x35, 0x01, 0x35, 0x1C, 0x1C, 0x1C,
+								0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x09,
+								0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09,
+								0x9A, 0x00, 0x00, 0x09, 0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09,
+								0x9A, 0x09, 0x9A, 0x19};
+	static char defaultCF_MP_cmd60[134] = {
+								0xCF, 0x64, 0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03,
+								0x20, 0x0C, 0x81, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04,
+								0x04, 0x04, 0x04, 0x04, 0x05, 0x00, 0xFF, 0x00, 0xFF, 0x00,
+								0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00,
+								0xFF, 0x00, 0xFF, 0x03, 0xFF, 0x03, 0xFF, 0x03, 0xFF, 0x00,
+								0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00,
+								0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x03, 0xFF, 0x03,
+								0xFF, 0x03, 0xFF, 0x01, 0x35, 0x01, 0x35, 0x01, 0x35, 0x01,
+								0x35, 0x01, 0x35, 0x01, 0x35, 0x01, 0x35, 0x01, 0x35, 0x01,
+								0x35, 0x01, 0x35, 0x01, 0x35, 0x01, 0x35, 0x1C, 0x1C, 0x1C,
+								0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x09,
+								0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09,
+								0x9A, 0x00, 0x00, 0x09, 0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09,
+								0x9A, 0x09, 0x9A, 0x19};
+	static char high_dimmingCF_cmd90[134] = {
+								0xCF, 0x64, 0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03,
+								0x20, 0x0C, 0x81, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
+								0x02, 0x02, 0x02, 0x02, 0x03, 0x00, 0xFF, 0x00, 0xFF, 0x00,
+								0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00,
+								0xFF, 0x00, 0xFF, 0x03, 0xFF, 0x03, 0xFF, 0x03, 0xFF, 0x00,
+								0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00,
+								0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x03, 0xFF, 0x03,
+								0xFF, 0x03, 0xFF, 0x01, 0x35, 0x01, 0x35, 0x01, 0x35, 0x01,
+								0x35, 0x01, 0x35, 0x01, 0x35, 0x01, 0x35, 0x01, 0x35, 0x01,
+								0x35, 0x01, 0x35, 0x01, 0x35, 0x01, 0x35, 0x1C, 0x1C, 0x1C,
+								0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x09,
+								0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09,
+								0x9A, 0x00, 0x00, 0x0F, 0x85, 0x0F, 0x85, 0x0F, 0x85, 0x0F,
+								0x85, 0x0F, 0x85, 0x19};
+	static char high_dimmingCF_cmd60[134] = {
+								0xCF, 0x64, 0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03,
+								0x20, 0x0C, 0x81, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04,
+								0x04, 0x04, 0x04, 0x04, 0x05, 0x00, 0xFF, 0x00, 0xFF, 0x00,
+								0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00,
+								0xFF, 0x00, 0xFF, 0x03, 0xFF, 0x03, 0xFF, 0x03, 0xFF, 0x00,
+								0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00,
+								0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x03, 0xFF, 0x03,
+								0xFF, 0x03, 0xFF, 0x01, 0x1A, 0x01, 0x1A, 0x01, 0x1A, 0x01,
+								0x1A, 0x01, 0x1A, 0x01, 0x1A, 0x01, 0x35, 0x01, 0x35, 0x01,
+								0x35, 0x01, 0x35, 0x01, 0x35, 0x01, 0x35, 0x1C, 0x1C, 0x1C,
+								0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x1C, 0x09,
+								0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09, 0x9A, 0x09,
+								0x9A, 0x00, 0x00, 0x0F, 0x85, 0x0F, 0x85, 0x0F, 0x85, 0x0F,
+								0x85, 0x0F, 0x85, 0x19};
+
+	if (mode == g_set_dimming_mode) {
+		pr_err("[Display] skip set dimming, mode same\n");
+		return;
+	}
+
+	g_set_dimming_mode = mode;
+
+	set_tcon_cmd(bank_cmd, sizeof(bank_cmd), 0);
+	if (mode == 0) {
+		pr_err("[Display] set default dimming\n");
+
+		g_lock_bl_level = false;
+		if(lastBL != fixed_bl)
+			last_bl = lastBL;
+		dsi_display_set_backlight(g_display, last_bl);
+
+		if (lastFps == 60) {
+			if(g_ASUS_hwID == ZS600KL_MP)
+				set_tcon_cmd(defaultCF_MP_cmd60, sizeof(defaultCF_MP_cmd60), 0);
+			else if(g_ASUS_hwID == ZS600KL_PR1)
+				set_tcon_cmd(defaultCF_PR_cmd60, sizeof(defaultCF_PR_cmd60), 0);
+			else
+				set_tcon_cmd(defaultCF_ER_cmd60, sizeof(defaultCF_ER_cmd60), 0);
+		} else {
+			if(g_ASUS_hwID == ZS600KL_MP)
+				set_tcon_cmd(defaultCF_MP_cmd90, sizeof(defaultCF_MP_cmd90), 0);
+			else if(g_ASUS_hwID == ZS600KL_PR1)
+				set_tcon_cmd(defaultCF_PR_cmd90, sizeof(defaultCF_PR_cmd90), 0);
+			else
+				set_tcon_cmd(defaultCF_ER_cmd90, sizeof(defaultCF_ER_cmd90), 0);
+		}
+	} else if (mode == 1) {
+		pr_err("[Display] set higher dimming\n");
+
+		last_bl = lastBL;
+		dsi_display_set_backlight(g_display, fixed_bl);
+		g_lock_bl_level = true;
+
+		if (lastFps == 60) {
+			set_tcon_cmd(high_dimmingCF_cmd60, sizeof(high_dimmingCF_cmd60), 0);
+		} else {
+			set_tcon_cmd(high_dimmingCF_cmd90, sizeof(high_dimmingCF_cmd90), 0);
+		}
+	}
+}
+
+static ssize_t set_dimming_mode_write(struct file *filp, const char *buff, size_t len, loff_t *off)
+{
+	char messages[256];
+	memset(messages, 0, sizeof(messages));
+
+	if (len > 256)
+		len = 256;
+	if (copy_from_user(messages, buff, len))
+		return -EFAULT;
+
+	if (!g_enter_AOD && !panelOff) {
+
+		if (strncmp(messages, "0", 1) == 0)
+			set_dimming_mode(0);
+		else if (strncmp(messages, "1", 1) == 0)
+			set_dimming_mode(1);
+		else
+			pr_err("[Display] unknown mode for set dimming\n");
+
+	} else {
+		pr_err("[Display] panel off, skip set dimming\n");
+	}
+
+	return len;
+}
+
+static ssize_t set_dimming_mode_read(struct file *file, char __user *buf,
+                    size_t count, loff_t *ppos)
+{
+	int len = 0;
+	ssize_t ret = 0;
+	char *buff;
+
+	buff = kmalloc(100, GFP_KERNEL);
+	if (!buff)
+		return -ENOMEM;
+
+	pr_debug("[Display] current dimming = %s\n", g_set_dimming_mode?"97%%":"60%%");
+
+	len += sprintf(buff, "%d\n", g_set_dimming_mode);
+	ret = simple_read_from_buffer(buf, count, ppos, buff, len);
+	kfree(buff);
+
+	return ret;
+}
+
+static struct file_operations set_dimming_mode_ops = {
+	.write = set_dimming_mode_write,
+	.read = set_dimming_mode_read,
+};
+/* ASUS BSP Display, for change dimming --- */
+
+/* ASUS BSP Display, for hbm mode +++ */
+/* 0 : call from AP
+ * 1 : call in AOD
+*/
+static void set_hbm_mode(int mode, int type)
+{
+    static char hbm_on[2] = {0x53, 0xEC};	/* hbm on command */
+    static char hbm_off[2] = {0x53, 0x2C};	/* hbm off command */
+	static char page_cmd[2] = {0xb0, 0x00};
+	static char slope_cmd[47] = {0xBB, 0x59, 0xC8, 0xC8, 0xC8, 0xC8, 0xC8, 0xC8, 0xC8, 0xC8,
+								 0xC8, 0x4A, 0x48, 0x46, 0x44, 0x42, 0x40, 0x3E, 0x3C, 0x3A,
+								 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+								 0x04, 0x00, 0x04, 0x04, 0x42, 0x04, 0x69, 0x5A, 0x00, 0x0F,
+								 0xFF, 0x0F, 0xFF, 0x0F, 0xFF, 0x0F, 0xFF};
+
+	if (mode == g_hbm_mode) {
+		pr_err("[Display] mode same\n");
+		return;
+	}
+
+    g_hbm_mode = mode;
+
+	set_tcon_cmd(page_cmd, sizeof(page_cmd), type);
+    if (mode == 0) {
+		pr_err("[Display] hbm off\n");
+		slope_cmd[32] = 0x04;
+		slope_cmd[33] = 0x04;
+		slope_cmd[34] = 0x42;
+		slope_cmd[39] = 0x0C;
+		slope_cmd[40] = 0x80;
+		set_tcon_cmd(slope_cmd, sizeof(slope_cmd), type);
+		set_tcon_cmd(hbm_off, sizeof(hbm_off), type);
+
+		msleep(500);
+		if (lastFps == 60) {
+			slope_cmd[32] = 0x01;
+			slope_cmd[33] = 0x01;
+			slope_cmd[34] = 0x06;
+		} else {
+			slope_cmd[32] = 0x02;
+			slope_cmd[33] = 0x02;
+			slope_cmd[34] = 0x46;
+		}
+		set_tcon_cmd(slope_cmd, sizeof(slope_cmd), type);
+    } else if (mode == 1) {
+        pr_err("[Display] hbm on\n");
+		slope_cmd[32] = 0x04;
+		slope_cmd[33] = 0x04;
+		slope_cmd[34] = 0x42;
+		slope_cmd[39] = 0x0F;
+		slope_cmd[40] = 0xFF;
+		set_tcon_cmd(slope_cmd, sizeof(slope_cmd), type);
+		set_tcon_cmd(hbm_on, sizeof(hbm_on), type);
+
+		msleep(500);
+		if (lastFps == 60) {
+			slope_cmd[32] = 0x01;
+			slope_cmd[33] = 0x01;
+			slope_cmd[34] = 0x06;
+		} else {
+			slope_cmd[32] = 0x02;
+			slope_cmd[33] = 0x02;
+			slope_cmd[34] = 0x46;
+		}
+		set_tcon_cmd(slope_cmd, sizeof(slope_cmd), type);
+    }
+}
+
+static ssize_t hbm_mode_write(struct file *filp, const char *buff, size_t len, loff_t *off)
+{
+    char messages[256];
+    memset(messages, 0, sizeof(messages));
+
+    if (len > 256)
+        len = 256;
+    if (copy_from_user(messages, buff, len))
+        return -EFAULT;
+
+	if (!g_enter_AOD && !panelOff) {
+        if (strncmp(messages, "0", 1) == 0) {
+			set_hbm_mode(0, 0);
+            if(stn.set_hbm && ASUS_POGO_ID == STATION)
+                stn.set_hbm(0);
+        } else if (strncmp(messages, "1", 1) == 0) {
+			set_hbm_mode(1, 0);
+            if(stn.set_hbm && ASUS_POGO_ID == STATION)
+                stn.set_hbm(1);
+        } else {
+            pr_err("[Display] does not match any hbm mode.\n");
+        }
+	} else {
+		pr_err("[Display] unable set.\n");
+	}
+
+    return len;
+}
+
+static ssize_t hbm_mode_read(struct file *file, char __user *buf,
+                    size_t count, loff_t *ppos)
+{
+    int len = 0;
+    ssize_t ret = 0;
+    char *buff;
+
+    buff = kmalloc(100, GFP_KERNEL);
+    if (!buff)
+        return -ENOMEM;
+
+	pr_debug("[Display] hbm mode is %d\n", g_hbm_mode);
+
+    len += sprintf(buff, "%d\n", g_hbm_mode);
+    ret = simple_read_from_buffer(buf, count, ppos, buff, len);
+    kfree(buff);
+
+    return ret;
+}
+
+static struct file_operations hbm_mode_ops = {
+    .write = hbm_mode_write,
+    .read = hbm_mode_read,
+};
+/* ASUS BSP Display, for hbm mode --- */
+
+/* ASUS BSP Display, for asus dfps +++ */
+static ssize_t asus_dfps_read(struct file *file, char __user *buf,
+                    size_t count, loff_t *ppos)
+{
+    int len = 0;
+    ssize_t ret = 0;
+    char *buff;
+
+    buff = kmalloc(100, GFP_KERNEL);
+    if (!buff)
+        return -ENOMEM;
+
+    pr_err("[Display] asus dfps is %d\n", lastFps);
+
+    len += sprintf(buff, "%d\n", lastFps);
+    ret = simple_read_from_buffer(buf, count, ppos, buff, len);
+    kfree(buff);
+
+    return ret;
+}
+
+static struct file_operations asus_dfps_ops = {
+    //.write = asus_dfps_write,
+    .read = asus_dfps_read,
+};
+/* ASUS BSP Display, for asus dfps --- */
+
+static ssize_t alpm_mode_write(struct file *filp, const char *buff, size_t len, loff_t *off)
+{
+    char messages[256];
+    memset(messages, 0, sizeof(messages));
+
+    if (len > 256)
+        len = 256;
+    if (copy_from_user(messages, buff, len))
+        return -EFAULT;
+
+    if (strncmp(messages, "0", 1) == 0) {
+        g_alpm_mode = 0;
+    } else if (strncmp(messages, "1", 1) == 0) { //off to 40nits
+        g_alpm_mode = 1;
+        g_alpm_bl = 448;
+    } else if (strncmp(messages, "2", 1) == 0) { //off to 5nits
+        g_alpm_mode = 2;
+        g_alpm_bl = 64;
+    } else if (strncmp(messages, "3", 1) == 0) { //5nits to 40nits
+        g_alpm_mode = 3;
+        g_alpm_bl = 448;
+    } else if (strncmp(messages, "4", 1) == 0) { //40nits to 5nits
+        g_alpm_mode = 4;
+        g_alpm_bl = 64;
+    } else {
+        pr_err("[Display] does not match any alpm mode.(%s)\n", messages);
+    }
+
+    if (g_alpm_mode != 0)
+		dsi_panel_set_backlight(g_display->panel, g_alpm_bl);
+    pr_err("[Display] alpm mode = %d, bl=%d\n", g_alpm_mode, g_alpm_bl);
+
+    return len;
+}
+
+static ssize_t alpm_mode_read(struct file *file, char __user *buf,
+                    size_t count, loff_t *ppos)
+{
+    int len = 0;
+    ssize_t ret = 0;
+    char *buff;
+
+    buff = kmalloc(100, GFP_KERNEL);
+    if (!buff)
+        return -ENOMEM;
+
+    pr_err("[Display] alpm mode: %d\n", g_alpm_mode);
+
+    len += sprintf(buff, "%d\n", g_alpm_mode);
+    ret = simple_read_from_buffer(buf, count, ppos, buff, len);
+    kfree(buff);
+
+    return ret;
+}
+
+static struct file_operations alpm_mode_ops = {
+    .write = alpm_mode_write,
+    .read = alpm_mode_read,
+};
+
 static int dsi_display_force_update_dsi_clk(struct dsi_display *display)
 {
 	int rc = 0;
@@ -4706,6 +5619,17 @@ static int dsi_display_bind(struct device *dev,
 
 	mutex_lock(&display->display_lock);
 
+	// ASUS BSP Display +++
+	//ASUS_BSP+++ read lcd unique id for factory
+	proc_create("lcd_unique_id", 0444, NULL, &lcd_uniqueID_proc_ops);
+	mutex_init(&cmd_mutex);
+	proc_create(LCD_REGISTER_RW, 0640, NULL, &lcd_reg_rw_ops);
+	proc_create(HBM_MODE, 0666, NULL, &hbm_mode_ops);
+	proc_create(SET_DIMMING_MODE, 0666, NULL, &set_dimming_mode_ops);
+	proc_create(ASUS_DFPS, 0666, NULL, &asus_dfps_ops);
+	proc_create(ALPM_MODE, 0666, NULL, &alpm_mode_ops);
+	// ASUS BSP Display ---
+
 	rc = dsi_display_debugfs_init(display);
 	if (rc) {
 		pr_err("[%s] debugfs init failed, rc=%d\n", display->name, rc);
@@ -4862,6 +5786,8 @@ static int dsi_display_bind(struct device *dev,
 	/* register te irq handler */
 	dsi_display_register_te_irq(display);
 
+    g_display = display; // ASUS BSP Display +++
+    INIT_DELAYED_WORK(&blwk, set_bl_work);
 	goto error;
 
 error_host_deinit:
@@ -6327,6 +7253,9 @@ int dsi_display_prepare(struct dsi_display *display)
 					display->name, rc);
 			goto error_ctrl_link_off;
 		}
+
+		if(stn.resume && ASUS_POGO_ID == STATION && g_hpd)
+			stn.resume();
 	}
 	goto error;
 
@@ -6347,6 +7276,9 @@ error_panel_post_unprep:
 error:
 	mutex_unlock(&display->display_lock);
 	SDE_EVT32(SDE_EVTLOG_FUNC_EXIT);
+#if defined(CONFIG_PXLW_IRIS3) && !defined(IRIS3_ABYP_LIGHTUP)
+	iris3_display_prepare(display);
+#endif
 	return rc;
 }
 
@@ -6556,6 +7488,28 @@ error_out:
 	return rc;
 }
 
+/* ASUS BSP Display, add for dfps +++ */
+int dsi_display_asusFps(struct dsi_display *display, int type)
+{
+	int rc = 0;
+	if (!display || !display->panel) {
+		pr_err("Invalid params\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&display->display_lock);
+
+    rc = dsi_panel_asusFps(display->panel, type);
+	if (rc) {
+		pr_err("[%s] failed to enable DSI panel, rc=%d\n",
+			display->name, rc);
+	}
+
+	mutex_unlock(&display->display_lock);
+	return rc;
+}
+/* ASUS BSP Display, add for dfps --- */
+
 int dsi_display_enable(struct dsi_display *display)
 {
 	int rc = 0;
@@ -6578,6 +7532,10 @@ int dsi_display_enable(struct dsi_display *display)
 	if (display->is_cont_splash_enabled) {
 
 		dsi_display_config_ctrl_for_cont_splash(display);
+
+#if defined(CONFIG_PXLW_IRIS3) && !defined(IRIS3_ABYP_LIGHTUP)
+		iris3_send_cont_splash_pkt(IRIS_CONT_SPLASH_BYPASS);
+#endif
 
 		rc = dsi_display_splash_res_cleanup(display);
 		if (rc) {
@@ -6648,6 +7606,15 @@ int dsi_display_enable(struct dsi_display *display)
 		pr_err("[%s] Invalid configuration\n", display->name);
 		rc = -EINVAL;
 		goto error_disable_panel;
+	}
+	
+	if (gAODBL) {
+		pr_err("[Display] resend blwk\n");
+		if(g_iris_cur_mode == ANALOG_BYPASS_MODE) {
+			iris_abypass_switch_proc(display, ANALOG_BYPASS_MODE, false);
+			schedule_delayed_work(&blwk, 100);
+		}
+		gAODBL = false;
 	}
 
 	goto error;
@@ -6785,6 +7752,11 @@ int dsi_display_unprepare(struct dsi_display *display)
 	if (rc)
 		pr_err("[%s] display wake up failed, rc=%d\n",
 		       display->name, rc);
+
+	if(stn.suspend && ASUS_POGO_ID == STATION && g_hpd) {
+		reinit_completion(&stn_dp_comp);
+		stn.suspend();
+	}
 
 	rc = dsi_panel_unprepare(display->panel);
 	if (rc)

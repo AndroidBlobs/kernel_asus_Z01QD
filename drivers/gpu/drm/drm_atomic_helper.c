@@ -470,6 +470,14 @@ mode_fixup(struct drm_atomic_state *state)
  * RETURNS:
  * Zero for success or -errno
  */
+
+/* ASUS BSP Display, add for dfps +++ */
+bool gFirstBoot = true;
+struct drm_display_mode *gDispMode;
+int lastFps = 90;
+bool changeFps = false;
+/* ASUS BSP Display, add for dfps --- */
+
 int
 drm_atomic_helper_check_modeset(struct drm_device *dev,
 				struct drm_atomic_state *state)
@@ -481,11 +489,39 @@ drm_atomic_helper_check_modeset(struct drm_device *dev,
 	int i, ret;
 
 	for_each_crtc_in_state(state, crtc, crtc_state, i) {
+		/* ASUS BSP Display, add for dfps +++ */
+		if (gFirstBoot && !strcmp(crtc->name, "crtc-0")) {
+			if (!gDispMode) {
+				gDispMode = kzalloc(sizeof(struct drm_display_mode), GFP_KERNEL);
+			}
+			memcpy(gDispMode, &crtc->state->mode, sizeof(struct drm_display_mode));
+			pr_err("[Display] %s - %s:: Global Fps (%d)\n", __func__, crtc->name, gDispMode->vrefresh);
+			gFirstBoot = false;
+		}
+
+		if (crtc_state->enable && crtc->state->active && crtc_state->active && !strcmp(crtc->name, "crtc-0")) {
+			if ((lastFps != crtc_state->mode.vrefresh) && !changeFps) {
+				pr_err("[Display] %s - fps is different (prev: %d) (now: %d) (lastFps: %d).\n", __func__,
+					crtc->state->mode.vrefresh, crtc_state->mode.vrefresh, lastFps);
+				lastFps = crtc_state->mode.vrefresh;
+				changeFps = true;
+			}
+			memcpy(&crtc_state->mode, gDispMode, sizeof(struct drm_display_mode)); // cp global to now
+		} 
+		/* ASUS BSP Display, add for dfps --- */
+
 		if (!drm_mode_equal(&crtc->state->mode, &crtc_state->mode)) {
 			DRM_DEBUG_ATOMIC("[CRTC:%d:%s] mode changed\n",
 					 crtc->base.id, crtc->name);
 			crtc_state->mode_changed = true;
 		}
+
+		/* ASUS BSP Display, add for dfps --- */		
+		if (!strcmp(crtc->name, "crtc-0") && crtc_state->mode_changed) {
+			memcpy(&crtc_state->mode, gDispMode, sizeof(struct drm_display_mode));
+			crtc_state->mode_changed = false;
+		}
+		/* ASUS BSP Display, add for dfps --- */	
 
 		if (crtc->state->enable != crtc_state->enable) {
 			DRM_DEBUG_ATOMIC("[CRTC:%d:%s] enable changed\n",
@@ -539,6 +575,10 @@ drm_atomic_helper_check_modeset(struct drm_device *dev,
 			DRM_DEBUG_ATOMIC("[CRTC:%d:%s] active changed\n",
 					 crtc->base.id, crtc->name);
 			crtc_state->active_changed = true;
+			/* ASUS BSP Display, add for dfps 
+			* do not set any command set when suspend/resume
+			*/
+			changeFps = false; 
 		}
 
 		if (!drm_atomic_crtc_needs_modeset(crtc_state))

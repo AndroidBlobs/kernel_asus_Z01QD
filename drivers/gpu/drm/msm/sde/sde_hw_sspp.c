@@ -18,6 +18,11 @@
 #include "sde_dbg.h"
 #include "sde_kms.h"
 
+#if defined(CONFIG_PXLW_IRIS3)
+#include "sde_encoder.h"
+#include "dsi_iris3_api.h"
+#endif
+
 #define SDE_FETCH_CONFIG_RESET_VALUE   0x00000087
 
 /* SDE_SSPP_SRC */
@@ -714,6 +719,9 @@ static void sde_hw_sspp_setup_sharpening(struct sde_hw_pipe *ctx,
 	struct sde_hw_blk_reg_map *c;
 	u32 idx;
 
+#if defined(CONFIG_PXLW_IRIS3)
+	cfg = NULL;
+#endif
 	if (_sspp_subblk_offset(ctx, SDE_SSPP_SCALER_QSEED2, &idx) || !cfg ||
 			!test_bit(SDE_SSPP_SCALER_QSEED2, &ctx->cap->features))
 		return;

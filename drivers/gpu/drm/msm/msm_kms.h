@@ -110,6 +110,9 @@ struct msm_kms_funcs {
 	int (*cont_splash_config)(struct msm_kms *kms);
 	/* check for continuous splash status */
 	bool (*check_for_splash)(struct msm_kms *kms);
+#if defined(CONFIG_PXLW_IRIS3)
+	int (*iris3_operate)(struct msm_kms *kms, u32 operate_type, struct msm_iris_operate_value *operate_value);
+#endif
 };
 
 struct msm_kms {

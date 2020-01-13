@@ -38,7 +38,44 @@
 #include "sde_hdcp.h"
 #include "dp_debug.h"
 
+/* ASUS BSP Display +++ */
+#include <linux/proc_fs.h>
+
 static struct dp_display *g_dp_display;
+#define HDCP_FAIL_COUNT 2
+#define BOOT_COMP    "boot_comp"
+int hdcp_fail_count = HDCP_FAIL_COUNT;
+bool g_boot_comp = false;
+bool g_unplug = false;
+struct completion boot_comp;
+struct completion dp_stop_comp;
+struct completion stn_dp_comp;
+extern struct completion usb_host_complete1;
+extern int usb_speed_store_high;
+
+int hdcp_retry = 5;
+bool dp_ready = false;
+bool dp_in_stn = false;
+
+extern struct asus_station stn;
+extern volatile enum POGO_ID ASUS_POGO_ID;
+enum POGO_ID {
+	ERROR1 = 0,
+	NO_INSERT,
+	INBOX,
+	DT,
+	STATION,
+	OTHER,
+};
+
+struct dp_display_private *asus_dp;
+void asus_anx_standby(bool mode);
+extern bool dp_sus;
+extern bool force_hdcp1x;
+extern bool dt_hdmi;
+extern struct msm_rtb_state msm_rtb;
+/* ASUS BSP Display --- */
+
 #define HPD_STRING_SIZE 30
 
 struct dp_hdcp {
@@ -97,6 +134,23 @@ static const struct of_device_id dp_dt_match[] = {
 	{.compatible = "qcom,dp-display"},
 	{}
 };
+
+bool get_dp_status(void)
+{
+	return dp_ready;
+}
+EXPORT_SYMBOL(get_dp_status);
+
+int wait4dp(void)
+{
+	int rc = 0;
+	if (!wait_for_completion_timeout(&stn_dp_comp, msecs_to_jiffies(100))) {
+		rc = -EINVAL;
+		pr_err("[Display] wait for stn DP complete.\n");
+	}
+	return rc;
+}
+EXPORT_SYMBOL(wait4dp);
 
 static bool dp_display_framework_ready(struct dp_display_private *dp)
 {
@@ -188,8 +242,10 @@ static void dp_display_notify_hdcp_status_cb(void *ptr,
 
 	dp->link->hdcp_status.hdcp_state = state;
 
-	if (dp->dp_display.is_connected)
+	if (dp->dp_display.is_connected && hdcp_retry > 0) {
 		queue_delayed_work(dp->wq, &dp->hdcp_cb_work, HZ/4);
+		hdcp_retry--;
+	}
 }
 
 static void dp_display_destroy_hdcp_workqueue(struct dp_display_private *dp)
@@ -217,14 +273,18 @@ static void dp_display_update_hdcp_info(struct dp_display_private *dp)
 		return;
 	}
 
-	fd = dp->hdcp.hdcp2;
-	if (fd)
-		ops = sde_dp_hdcp2p2_start(fd);
-
-	if (ops && ops->feature_supported)
-		hdcp2_present = ops->feature_supported(fd);
-	else
+	if (ASUS_POGO_ID == STATION || ASUS_POGO_ID == DT || (force_hdcp1x && !dt_hdmi)) {
 		hdcp2_present = false;
+	} else {
+		fd = dp->hdcp.hdcp2;
+		if (fd)
+			ops = sde_dp_hdcp2p2_start(fd);
+
+		if (ops && ops->feature_supported)
+			hdcp2_present = ops->feature_supported(fd);
+		else
+			hdcp2_present = false;
+	}
 
 	pr_debug("hdcp2p2: %s\n",
 			hdcp2_present ? "supported" : "not supported");
@@ -381,6 +441,12 @@ static const struct component_ops dp_display_comp_ops = {
 	.unbind = dp_display_unbind,
 };
 
+bool dp_display_is_hdmi_bridge(struct dp_panel *panel)
+{
+	return (panel->dpcd[DP_DOWNSTREAMPORT_PRESENT] &
+		0x15);
+}
+
 static bool dp_display_is_ds_bridge(struct dp_panel *panel)
 {
 	return (panel->dpcd[DP_DOWNSTREAMPORT_PRESENT] &
@@ -512,7 +578,7 @@ static int dp_display_process_hpd_high(struct dp_display_private *dp)
 		 * ETIMEDOUT --> cable may have been removed
 		 * ENOTCONN --> no downstream device connected
 		 */
-		if (rc == -ETIMEDOUT || rc == -ENOTCONN)
+		if (rc == -ETIMEDOUT || rc == -ENOTCONN || rc == -EINVAL)
 			goto end;
 		else
 			goto notify;
@@ -547,6 +613,10 @@ static void dp_display_host_init(struct dp_display_private *dp)
 		flip = true;
 
 	reset = dp->debug->sim_mode ? false : !dp->usbpd->multi_func;
+	if(usb_speed_store_high){
+		pr_err("[Display] usb2.0\n");
+		reset = true;
+	}
 
 	dp->power->init(dp->power, flip);
 	dp->ctrl->init(dp->ctrl, flip, reset);
@@ -588,6 +658,12 @@ static int dp_display_process_hpd_low(struct dp_display_private *dp)
 	rc = dp_display_send_hpd_notification(dp, false);
 
 	dp->panel->video_test = false;
+
+	/* ASUS BSP Display +++ */
+	dp->usbpd->hpd_high = false;
+	hdcp_fail_count = HDCP_FAIL_COUNT;
+	hdcp_retry = 5;
+	/* ASUS BSP Display --- */
 
 	return rc;
 }
@@ -679,12 +755,19 @@ static int dp_display_usbpd_disconnect_cb(struct device *dev)
 		goto end;
 	}
 
-	/*
-	 * In case cable/dongle is disconnected during adb shell stop,
-	 * reset psm_enabled flag to false since it is no more needed
-	 */
-	if (dp->dp_display.post_open)
-		dp->debug->psm_enabled = false;
+	/* ASUS BSP Display +++ */
+	if (!g_boot_comp) {
+		pr_err("[Display] boot up\n");
+		g_unplug = true;
+		complete_all(&boot_comp);
+	}
+	/* ASUS BSP Display --- */
+
+	reinit_completion(&stn_dp_comp);
+	if (ASUS_POGO_ID == STATION && stn.suspend ) {
+		pr_err("[Display] iris3 suspend\n");
+		stn.suspend();
+	}
 
 	if (dp->debug->psm_enabled)
 		dp->link->psm_config(dp->link, &dp->panel->link_info, true);
@@ -701,6 +784,7 @@ static int dp_display_usbpd_disconnect_cb(struct device *dev)
 
 	dp_display_handle_disconnect(dp);
 end:
+	complete_all(&dp_stop_comp);
 	return rc;
 }
 
@@ -723,11 +807,6 @@ static void dp_display_attention_work(struct work_struct *work)
 {
 	struct dp_display_private *dp = container_of(work,
 			struct dp_display_private, attention_work);
-
-	if (dp_display_is_hdcp_enabled(dp) && dp->hdcp.ops->cp_irq) {
-		if (!dp->hdcp.ops->cp_irq(dp->hdcp.data))
-			return;
-	}
 
 	if (dp->link->sink_request & DS_PORT_STATUS_CHANGED) {
 		dp_display_handle_disconnect(dp);
@@ -756,16 +835,17 @@ static void dp_display_attention_work(struct work_struct *work)
 		return;
 	}
 
-	if (dp->link->sink_request & DP_LINK_STATUS_UPDATED) {
-		dp_display_handle_maintenance_req(dp);
-		return;
-	}
-
 	if (dp->link->sink_request & DP_TEST_LINK_TRAINING) {
 		dp->link->send_test_response(dp->link);
 		dp_display_handle_maintenance_req(dp);
 		return;
 	}
+
+	if (dp->link->sink_request & DP_LINK_STATUS_UPDATED)
+		dp_display_handle_maintenance_req(dp);
+
+	if (dp_display_is_hdcp_enabled(dp) && dp->hdcp.ops->cp_irq)
+		dp->hdcp.ops->cp_irq(dp->hdcp.data);
 }
 
 static int dp_display_usbpd_attention_cb(struct device *dev)
@@ -819,6 +899,38 @@ static void dp_display_connect_work(struct work_struct *work)
 	struct dp_display_private *dp = container_of(dw,
 			struct dp_display_private, connect_work);
 
+	if (ASUS_POGO_ID != STATION)
+		msm_rtb.enabled = 1;
+
+	/* ASUS BSP Display +++ */
+	if (!g_boot_comp) {
+		pr_err("[Display] boot up\n");
+		reinit_completion(&boot_comp);
+		if (!wait_for_completion_timeout(&boot_comp, HZ * 60)) {
+			pr_err("[Display] boot_comp timeout\n");
+			return;
+		}
+
+		if (g_unplug) {
+			pr_err("[Display] unplug\n");
+			g_unplug = false;
+			return;
+		}
+	}
+
+	if (ASUS_POGO_ID != DT) {
+		if (!wait_for_completion_timeout(&usb_host_complete1, HZ * 10)) {
+			pr_err("[Display] usb host timeout\n");
+			return;
+		}
+
+		if(ASUS_POGO_ID == STATION && stn.resume){
+			pr_err("[Display] iris3 resume\n");
+			stn.resume();
+		}
+	}
+	/* ASUS BSP Display --- */
+
 	if (dp->dp_display.is_connected && dp_display_framework_ready(dp)) {
 		pr_debug("HPD already on\n");
 		return;
@@ -829,6 +941,8 @@ static void dp_display_connect_work(struct work_struct *work)
 		return;
 	}
 
+	pr_err("[Display] dp connect.\n");
+	reinit_completion(&dp_stop_comp);
 	dp_display_process_hpd_high(dp);
 }
 
@@ -1093,6 +1207,8 @@ static int dp_display_enable(struct dp_display *dp_display)
 		dp->debug->psm_enabled = false;
 	}
 
+	asus_anx_standby(0); /* ASUS BSP Display */
+
 	rc = dp->ctrl->on(dp->ctrl);
 
 	if (dp->debug->tpg_state)
@@ -1182,15 +1298,6 @@ static int dp_display_pre_disable(struct dp_display *dp_display)
 			dp->hdcp.ops->off(dp->hdcp.data);
 	}
 
-	if (dp->usbpd->hpd_high && !dp_display_is_sink_count_zero(dp) &&
-		dp->usbpd->alt_mode_cfg_done) {
-		if (dp->audio_supported)
-			dp->audio->off(dp->audio);
-
-		dp->link->psm_config(dp->link, &dp->panel->link_info, true);
-		dp->debug->psm_enabled = true;
-	}
-
 	dp->ctrl->push_idle(dp->ctrl);
 end:
 	mutex_unlock(&dp->session_lock);
@@ -1218,6 +1325,11 @@ static int dp_display_disable(struct dp_display *dp_display)
 		pr_debug("Link already powered off, return\n");
 		goto end;
 	}
+
+	/* ASUS BSP Display +++ */
+	if (dp_sus)
+		asus_anx_standby(1);
+	/* ASUS BSP Display --- */
 
 	dp->ctrl->off(dp->ctrl);
 	dp->panel->deinit(dp->panel);
@@ -1382,6 +1494,52 @@ static int dp_display_create_workqueue(struct dp_display_private *dp)
 	return 0;
 }
 
+/* ASUS BSP Display +++ */
+static ssize_t boot_comp_write(struct file *filp, const char *buff, size_t len, loff_t *off)
+{
+	char messages[256];
+	memset(messages, 0, sizeof(messages));
+
+	if (len > 256)
+		len = 256;
+	if (copy_from_user(messages, buff, len))
+		return -EFAULT;
+
+	pr_debug("[Display] boot completed (%s)\n", messages);
+	if (strncmp(messages, "1", 1) == 0) {
+		g_boot_comp = true;
+		complete_all(&boot_comp);
+	}
+
+	return len;
+}
+
+static ssize_t boot_comp_read(struct file *file, char __user *buf,
+					size_t count, loff_t *ppos)
+{
+	int len = 0;
+	ssize_t ret = 0;
+	char *buff;
+
+	buff = kmalloc(100, GFP_KERNEL);
+	if (!buff)
+		return -ENOMEM;
+
+	pr_debug("[Display] boot comp is %d\n", g_boot_comp);
+
+	len += sprintf(buff, "%d\n", g_boot_comp);
+	ret = simple_read_from_buffer(buf, count, ppos, buff, len);
+	kfree(buff);
+
+	return ret;
+}
+
+static struct file_operations boot_comp_ops = {
+	.write = boot_comp_write,
+	.read = boot_comp_read,
+};
+/* ASUS BSP Display --- */
+
 static int dp_display_probe(struct platform_device *pdev)
 {
 	int rc = 0;
@@ -1400,6 +1558,9 @@ static int dp_display_probe(struct platform_device *pdev)
 	}
 
 	init_completion(&dp->notification_comp);
+	init_completion(&boot_comp); /* ASUS BSP Display +++ */
+	init_completion(&stn_dp_comp);
+	init_completion(&dp_stop_comp);
 
 	dp->pdev = pdev;
 	dp->name = "drm_dp";
@@ -1437,12 +1598,29 @@ static int dp_display_probe(struct platform_device *pdev)
 		goto error;
 	}
 
+	/* ASUS BSP Display +++ */
+	proc_create(BOOT_COMP, 0664, NULL, &boot_comp_ops);
+	asus_dp = dp; 
+	/* ASUS BSP Display --- */
+
 	return 0;
 error:
 	devm_kfree(&pdev->dev, dp);
 bail:
 	return rc;
 }
+
+/* ASUS BSP Display +++ */
+void asus_anx_standby(bool mode)
+{
+	if (dp_in_stn && ASUS_POGO_ID == STATION) {
+		pr_err("mode(%d)\n",mode);
+		asus_dp->link->psm_config(asus_dp->link, &asus_dp->panel->link_info, mode);
+		if (!mode)
+			mdelay(50);
+	}
+}
+/* ASUS BSP Display +++ */
 
 int dp_display_get_displays(void **displays, int count)
 {

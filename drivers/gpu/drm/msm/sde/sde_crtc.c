@@ -39,6 +39,15 @@
 #include "sde_core_perf.h"
 #include "sde_trace.h"
 
+/* ASUS BSP Display +++ */
+#define COMMIT_FRAMES_COUNT 10
+int display_commit_cnt = COMMIT_FRAMES_COUNT;
+int dp_display_commit_cnt = COMMIT_FRAMES_COUNT;
+extern bool dp_ready;
+extern bool dp_in_stn;
+extern struct completion stn_dp_comp;
+/* ASUS BSP Display --- */
+
 #define SDE_PSTATES_MAX (SDE_STAGE_MAX * 4)
 #define SDE_MULTIRECT_PLANE_MAX (SDE_STAGE_MAX * 2)
 
@@ -3797,6 +3806,28 @@ void sde_crtc_commit_kickoff(struct drm_crtc *crtc,
 		sde_encoder_kickoff(encoder, false);
 	}
 
+	/* ASUS BSP Display +++ */
+	if (!strcmp(crtc->name, "crtc-0")) { //primary
+		if (display_commit_cnt > 0) {
+			pr_err("fbc%d\n", display_commit_cnt);
+			display_commit_cnt--;
+		}
+	} else { //external
+		if (dp_display_commit_cnt > 0) {
+			pr_err("ext.fbc%d\n", dp_display_commit_cnt);
+	
+			// set dp ready
+			if(dp_display_commit_cnt == 1) {
+				complete_all(&stn_dp_comp);
+				dp_ready = true;
+				dp_in_stn = true;
+			}
+	
+			dp_display_commit_cnt--;
+		}
+	}
+	/* ASUS BSP Display --- */
+
 	SDE_ATRACE_END("crtc_commit");
 	return;
 }
@@ -4274,6 +4305,12 @@ static void sde_crtc_disable(struct drm_crtc *crtc)
 	/* disable clk & bw control until clk & bw properties are set */
 	cstate->bw_control = false;
 	cstate->bw_split_vote = false;
+
+	/* ASUS BSP Display +++ */
+	display_commit_cnt = COMMIT_FRAMES_COUNT;
+	dp_display_commit_cnt = COMMIT_FRAMES_COUNT;
+	dp_ready = false;
+	/* ASUS BSP Display --- */
 
 	mutex_unlock(&sde_crtc->crtc_lock);
 }

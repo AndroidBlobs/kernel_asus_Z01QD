@@ -66,6 +66,18 @@
 
 #define sde_hdcp_1x_state(x) (hdcp->hdcp_state == x)
 
+extern int hdcp_fail_count; /* ASUS BSP Display */
+extern volatile enum POGO_ID ASUS_POGO_ID;
+enum POGO_ID {
+	ERROR1 = 0,
+	NO_INSERT,
+	INBOX,
+	DT,
+	STATION,
+	OTHER,
+};
+extern bool dt_hdmi;
+
 struct sde_hdcp_sink_addr {
 	char *name;
 	u32 addr;
@@ -270,7 +282,10 @@ static int sde_hdcp_1x_load_keys(void *input)
 	reg_set = &hdcp->reg_set;
 
 	if (hdcp1_set_keys(&aksv_msb, &aksv_lsb)) {
-		pr_err("setting hdcp SW keys failed\n");
+		if (hdcp_fail_count > 0) {
+			pr_err("setting hdcp SW keys failed\n");
+			hdcp_fail_count--;
+		}
 		rc = -EINVAL;
 		goto end;
 	}
@@ -1441,13 +1456,19 @@ static int sde_hdcp_1x_cp_irq(void *input)
 			buf & BIT(2) ? "LINK_INTEGRITY_FAILURE" :
 				"REAUTHENTICATION_REQUEST");
 
-		hdcp->reauth = true;
-
-		if (!sde_hdcp_1x_state(HDCP_STATE_INACTIVE))
-			hdcp->hdcp_state = HDCP_STATE_AUTH_FAIL;
-
-		complete_all(&hdcp->sink_r0_available);
-		sde_hdcp_1x_update_auth_status(hdcp);
+		/* ASUS BSP Display +++ */
+		if ( (buf & BIT(2)) && (ASUS_POGO_ID == DT && dt_hdmi) ) {
+			pr_err("ignore LINK_INTEGRITY_FAILURE\n");
+		} else {
+			hdcp->reauth = true;
+	
+			if (!sde_hdcp_1x_state(HDCP_STATE_INACTIVE))
+				hdcp->hdcp_state = HDCP_STATE_AUTH_FAIL;
+	
+			complete_all(&hdcp->sink_r0_available);
+			sde_hdcp_1x_update_auth_status(hdcp);
+		}
+		/* ASUS BSP Display --- */
 	} else if (buf & BIT(1)) {
 		pr_debug("R0' AVAILABLE\n");
 		hdcp->sink_r0_ready = true;

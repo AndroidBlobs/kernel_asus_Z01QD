@@ -336,6 +336,21 @@ void drm_bridge_enable(struct drm_bridge *bridge)
 }
 EXPORT_SYMBOL(drm_bridge_enable);
 
+/* ASUS BSP Display, add for dfps +++ */
+void drm_bridge_asusFps(struct drm_bridge *bridge, int type)
+{
+	if (!bridge)
+		return;
+
+	if (bridge->funcs->asusFps)
+		bridge->funcs->asusFps(bridge, type);
+
+	drm_bridge_asusFps(bridge->next, type);
+
+}
+EXPORT_SYMBOL(drm_bridge_asusFps);
+/* ASUS BSP Display, add for dfps --- */
+
 #ifdef CONFIG_OF
 /**
  * of_drm_find_bridge - find the bridge corresponding to the device node in

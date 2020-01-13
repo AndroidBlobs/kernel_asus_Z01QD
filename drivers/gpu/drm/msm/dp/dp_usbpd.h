@@ -67,6 +67,7 @@ struct dp_usbpd {
 
 	int (*simulate_connect)(struct dp_usbpd *dp_usbpd, bool hpd);
 	int (*simulate_attention)(struct dp_usbpd *dp_usbpd, int vdo);
+	int (*asus_debug)(struct dp_usbpd *dp_usbpd, int index); // ASUS Display BSP +++
 };
 
 /**

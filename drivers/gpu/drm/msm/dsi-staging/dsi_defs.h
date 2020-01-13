@@ -268,6 +268,28 @@ enum dsi_cmd_set_type {
 	DSI_CMD_SET_ROI,
 	DSI_CMD_SET_TIMING_SWITCH,
 	DSI_CMD_SET_POST_TIMING_SWITCH,
+#if defined(CONFIG_PXLW_IRIS3)
+	DSI_CMD_SET_ABYP,
+#endif
+/* ASUS BSP Display, add for dfps +++ */
+	DSI_CMD_SET_ON_60,
+	DSI_CMD_SET_60,
+	DSI_CMD_SET_90,
+	/* ASUS BSP Display, add for dfps --- */
+	/* ASUS BSP Display, add for pr stage +++ */
+	DSI_CMD_SET_ON_60_PR,
+	DSI_CMD_SET_ON_90_PR,
+	DSI_CMD_SET_60_PR,
+	DSI_CMD_SET_90_PR,
+	/* ASUS BSP Display, add for pr stage --- */
+	/* ASUS BSP Display, add for mp stage +++ */
+	DSI_CMD_SET_ON_60_MP,
+	DSI_CMD_SET_ON_90_MP,
+	DSI_CMD_SET_60_MP,
+	DSI_CMD_SET_90_MP,
+	/* ASUS BSP Display, add for mp stage --- */
+	DSI_CMD_SET_NOLP_60,
+	DSI_CMD_SET_LP1_PR,
 	DSI_CMD_SET_MAX
 };
 

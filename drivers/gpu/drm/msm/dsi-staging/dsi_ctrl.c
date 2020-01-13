@@ -915,6 +915,10 @@ static int dsi_ctrl_copy_and_pad_cmd(struct dsi_ctrl *dsi_ctrl,
 	/* send embedded BTA for read commands */
 	if ((buf[2] & 0x3f) == MIPI_DSI_DCS_READ)
 		buf[3] |= BIT(5);
+#if defined(CONFIG_PXLW_IRIS3)
+	if ((buf[2] & 0x3f) == MIPI_DSI_GENERIC_READ_REQUEST_1_PARAM)
+		buf[3] |= BIT(5);
+#endif
 
 	*buffer = buf;
 	*size = len;

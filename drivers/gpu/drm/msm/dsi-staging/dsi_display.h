@@ -449,6 +449,9 @@ int dsi_display_splash_res_cleanup(struct  dsi_display *display);
  */
 int dsi_display_config_ctrl_for_cont_splash(struct dsi_display *display);
 
+/* ASUS BSP Display, add for dfps */
+int dsi_display_asusFps(struct dsi_display *display, int type);
+
 /**
  * dsi_display_enable() - enable display
  * @display:            Handle to display.

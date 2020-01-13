@@ -22,7 +22,7 @@
 #include <linux/spinlock.h>
 #include <linux/rcupdate.h>
 #include <linux/workqueue.h>
-
+#include <linux/crc32c.h>
 unsigned int sysctl_nr_open __read_mostly = 1024*1024;
 unsigned int sysctl_nr_open_min = BITS_PER_LONG;
 /* our min() is unusable in constant expressions ;-/ */
@@ -49,6 +49,7 @@ static void __free_fdtable(struct fdtable *fdt)
 {
 	kvfree(fdt->fd);
 	kvfree(fdt->open_fds);
+	kvfree(fdt->user);
 	kfree(fdt);
 }
 
@@ -99,6 +100,8 @@ static void copy_fdtable(struct fdtable *nfdt, struct fdtable *ofdt)
 	memset((char *)nfdt->fd + cpy, 0, set);
 
 	copy_fd_bitmaps(nfdt, ofdt, ofdt->max_fds);
+       memcpy(nfdt->user, ofdt->user, ofdt->max_fds * sizeof(*nfdt->user));
+       memset(nfdt->user + ofdt->max_fds, 0, (nfdt->max_fds - ofdt->max_fds) * sizeof(*nfdt->user));
 }
 
 static struct fdtable * alloc_fdtable(unsigned int nr)
@@ -146,8 +149,14 @@ static struct fdtable * alloc_fdtable(unsigned int nr)
 	data += nr / BITS_PER_BYTE;
 	fdt->full_fds_bits = data;
 
+	data = alloc_fdmem(sizeof(*fdt->user) * nr);
+	if(!data)
+		goto out_open;
+	fdt->user = (struct fdt_user*) data;
+	
 	return fdt;
-
+out_open:
+	kvfree(fdt->open_fds);
 out_arr:
 	kvfree(fdt->fd);
 out_fdt:
@@ -311,7 +320,9 @@ struct files_struct *dup_fd(struct files_struct *oldf, int *errorp)
 	new_fdt->open_fds = newf->open_fds_init;
 	new_fdt->full_fds_bits = newf->full_fds_bits_init;
 	new_fdt->fd = &newf->fd_array[0];
-
+	
+	new_fdt->user = &newf->user_array[0];
+	
 	spin_lock(&oldf->file_lock);
 	old_fdt = files_fdtable(oldf);
 	open_files = count_open_files(old_fdt);
@@ -349,6 +360,7 @@ struct files_struct *dup_fd(struct files_struct *oldf, int *errorp)
 	}
 
 	copy_fd_bitmaps(new_fdt, old_fdt, open_files);
+	memset(new_fdt->user, 0, open_files * sizeof(*old_fdt->user));
 
 	old_fds = old_fdt->fd;
 	new_fds = new_fdt->fd;
@@ -473,6 +485,7 @@ struct files_struct init_files = {
 		.close_on_exec	= init_files.close_on_exec_init,
 		.open_fds	= init_files.open_fds_init,
 		.full_fds_bits	= init_files.full_fds_bits_init,
+		.user           = &init_files.user_array[0],
 	},
 	.file_lock	= __SPIN_LOCK_UNLOCKED(init_files.file_lock),
 };
@@ -494,6 +507,7 @@ static unsigned int find_next_fd(struct fdtable *fdt, unsigned int start)
 /*
  * allocate a file descriptor, mark it busy.
  */
+static void fdtable_usage_dump(struct fdtable *fdt);
 int __alloc_fd(struct files_struct *files,
 	       unsigned start, unsigned end, unsigned flags)
 {
@@ -538,6 +552,7 @@ repeat:
 		__set_close_on_exec(fd, fdt);
 	else
 		__clear_close_on_exec(fd, fdt);
+	memset(&fdt->user[fd], 0, sizeof(*fdt->user));
 	error = fd;
 #if 1
 	/* Sanity check */
@@ -548,6 +563,21 @@ repeat:
 #endif
 
 out:
+        if (unlikely(error == -EMFILE)) {
+                static unsigned long debugging_ratelimit = 0;
+                const unsigned long debugging_delay_ms = 30000;
+
+                if (jiffies > debugging_ratelimit) {
+                        debugging_ratelimit = jiffies + msecs_to_jiffies(debugging_delay_ms);
+
+                        printk(" [%s] Too many open files (%d/%u), dump all fdt users:\n",
+                                        __func__, count_open_files(fdt), fdt->max_fds);
+                        dump_stack();
+                        fdtable_usage_dump(fdt);
+                        printk(" [%s] end of dump\n", __func__);
+                }
+        }
+
 	spin_unlock(&files->file_lock);
 	return error;
 }
@@ -580,6 +610,67 @@ void put_unused_fd(unsigned int fd)
 }
 
 EXPORT_SYMBOL(put_unused_fd);
+
+static void fdtable_usage_dump(struct fdtable *fdt)
+{
+        int i, last_crc = 0, repeats = 0;
+        char* buf;
+		
+        buf = (char*) kmalloc(PATH_MAX, GFP_ATOMIC);
+        if (!buf) {
+                pr_err("%s: fail to alloc buffer\n", __func__);
+                return;
+        }
+
+        rcu_read_lock();
+        for (i = 0; i < fdt->max_fds; i++) {
+                struct file* file;
+				struct task_struct* user = NULL;
+				int this_crc, pid;
+                char* path;
+
+                file = fdt->fd[i];
+                if (!file)
+                        continue;
+				
+				pid = fdt->user[i].installer;
+
+				user = find_task_by_vpid(pid);
+				if (user)
+					get_task_struct(user);
+				
+                path = d_path(&file->f_path, buf, PATH_MAX);
+
+                if (IS_ERR(path))
+                        path = "<unknown>";
+                else {
+                        char* spath = strstr(path, ":[");
+                        if (spath) spath[0] = '\0';
+                }
+
+
+				this_crc = crc32c(pid, path, strlen(path));
+				if (this_crc != last_crc || i == fdt->max_fds - 1) {
+					if (repeats)
+						pr_warn("  < ... repeats %d time%s ... >\n",
+								repeats, repeats > 1 ? "s" : "");
+					pr_warn("%d->fd[%d] file: %s, user: %d (%s %d:%d)\n",
+							current->tgid, i, path, pid,
+							user ? user->comm : "<unknown>",
+							user ? user->tgid : -1,
+							user ? user->pid  : -1);
+
+					last_crc = this_crc;
+					repeats = 0;
+				} else
+					repeats++;
+
+				if (user)
+					put_task_struct(user);
+        }
+        rcu_read_unlock();
+        kfree(buf);
+}
 
 /*
  * Install a file pointer in the fd array.
@@ -618,6 +709,7 @@ void __fd_install(struct files_struct *files, unsigned int fd,
 	smp_rmb();
 	fdt = rcu_dereference_sched(files->fdt);
 	BUG_ON(fdt->fd[fd] != NULL);
+	fdt->user[fd].installer = current->pid;
 	rcu_assign_pointer(fdt->fd[fd], file);
 	rcu_read_unlock_sched();
 }
@@ -642,9 +734,26 @@ int __close_fd(struct files_struct *files, unsigned fd)
 	if (fd >= fdt->max_fds)
 		goto out_unlock;
 	file = fdt->fd[fd];
-	if (!file)
+	if (!file){
+		struct fdt_user* user = &fdt->user[fd];
+		/*
+		 * detecting the double closing that made by other thread
+		 */
+		if (unlikely(user->remover && user->remover != current->pid)) {
+			struct task_struct* task = find_task_by_vpid(user->remover);
+			pr_warn("[%s] fd %u of %s %d:%d is"
+					" already closed by thread %d (%s %d:%d)\n",
+					__func__, fd,
+					current->comm, current->tgid, current->pid,
+					user->remover,
+					task ? task->comm : "<unknown>",
+					task ? task->tgid : -1,
+					task ? task->pid  : -1);
+		}
 		goto out_unlock;
+	}
 	rcu_assign_pointer(fdt->fd[fd], NULL);
+	fdt->user[fd].remover = current->pid;
 	__clear_close_on_exec(fd, fdt);
 	__put_unused_fd(files, fd);
 	spin_unlock(&files->file_lock);

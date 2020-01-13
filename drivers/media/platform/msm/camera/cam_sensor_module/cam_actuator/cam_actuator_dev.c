@@ -16,6 +16,9 @@
 #include "cam_actuator_core.h"
 #include "cam_trace.h"
 
+//ASUS_BSP Lucien +++: porting actuator
+#include "asus_actuator.h"
+
 static long cam_actuator_subdev_ioctl(struct v4l2_subdev *sd,
 	unsigned int cmd, void *arg)
 {
@@ -374,8 +377,19 @@ static int32_t cam_actuator_driver_platform_probe(
 
 	platform_set_drvdata(pdev, a_ctrl);
 	v4l2_set_subdevdata(&a_ctrl->v4l2_dev_str.sd, a_ctrl);
+#if 0
+	rc = cam_actuator_construct_default_power_setting(
+		&soc_private->power_info);
+	if (rc < 0) {
+		CAM_ERR(CAM_ACTUATOR,
+			"Construct default actuator power setting failed.");
+		goto unreg_subdev;
+	}
+#endif
+	a_ctrl->debug_node_created = 0;//ASUS_BSP Zhengwei "porting actuator"	
 	a_ctrl->cam_act_state = CAM_ACTUATOR_INIT;
-
+	asus_actuator_init(a_ctrl);//ASUS_BSP Lucien "porting actuator"
+	CAM_INFO(CAM_ACTUATOR, "Actuator probe done");
 	return rc;
 
 free_mem:
@@ -386,6 +400,7 @@ free_cci_client:
 	kfree(a_ctrl->io_master_info.cci_client);
 free_ctrl:
 	devm_kfree(&pdev->dev, a_ctrl);
+	CAM_INFO(CAM_ACTUATOR, "Actuator probe failed");	
 	return rc;
 }
 

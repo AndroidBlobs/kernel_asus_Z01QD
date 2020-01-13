@@ -24,4 +24,5 @@ int cam_flash_process_evt(struct cam_req_mgr_link_evt_data *event_data);
 int cam_flash_flush_request(struct cam_req_mgr_flush_request *flush);
 
 
+
 #endif /*_CAM_FLASH_CORE_H_*/

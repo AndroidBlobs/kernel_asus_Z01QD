@@ -68,13 +68,18 @@ enum cam_actuator_state {
 struct cam_actuator_i2c_info_t {
 	uint16_t slave_addr;
 	uint8_t i2c_freq_mode;
+	//ASUS_BSP +++ Zhengwei "read id register when probe"
+	uint32_t id_register;
+	uint32_t chip_id;
+	//ASUS_BSP --- Zhengwei "read id register when probe"
 };
 
 struct cam_actuator_soc_private {
 	struct cam_actuator_i2c_info_t i2c_info;
 	struct cam_sensor_power_ctrl_t power_info;
 };
-
+#ifndef _CAM_INTF_PARAM
+#define _CAM_INTF_PARAM
 /**
  * struct intf_params
  * @device_hdl: Device Handle
@@ -89,7 +94,7 @@ struct intf_params {
 	struct cam_req_mgr_kmd_ops ops;
 	struct cam_req_mgr_crm_cb *crm_cb;
 };
-
+#endif
 /**
  * struct cam_actuator_ctrl_t
  * @i2c_driver: I2C device info
@@ -124,6 +129,10 @@ struct cam_actuator_ctrl_t {
 	struct cam_actuator_query_cap act_info;
 	struct intf_params bridge_intf;
 	char device_name[20];
+	//ASUS_BSP Zhengwei +++ "porting actuator"
+	uint32_t lens_pos;
+	uint8_t debug_node_created;
+	//ASUS_BSP Zhengwei --- "porting actuator"	
 };
 
 #endif /* _CAM_ACTUATOR_DEV_H_ */

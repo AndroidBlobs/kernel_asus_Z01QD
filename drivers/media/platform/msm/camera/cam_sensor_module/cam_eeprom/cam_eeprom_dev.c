@@ -15,7 +15,7 @@
 #include "cam_eeprom_soc.h"
 #include "cam_eeprom_core.h"
 #include "cam_debug_util.h"
-
+extern void set_rear_eeprom_ctrl(struct cam_eeprom_ctrl_t * ectrl);//ASUS_BSP Zhengwei "read eeprom info for ois fw update"
 static long cam_eeprom_subdev_ioctl(struct v4l2_subdev *sd,
 	unsigned int cmd, void *arg)
 {
@@ -408,7 +408,7 @@ static int32_t cam_eeprom_platform_driver_probe(
 	int32_t                         rc = 0;
 	struct cam_eeprom_ctrl_t       *e_ctrl = NULL;
 	struct cam_eeprom_soc_private  *soc_private = NULL;
-
+	CAM_INFO(CAM_EEPROM,"EEPROM Probe Start");
 	e_ctrl = kzalloc(sizeof(struct cam_eeprom_ctrl_t), GFP_KERNEL);
 	if (!e_ctrl)
 		return -ENOMEM;
@@ -464,7 +464,12 @@ static int32_t cam_eeprom_platform_driver_probe(
 	v4l2_set_subdevdata(&e_ctrl->v4l2_dev_str.sd, e_ctrl);
 
 	e_ctrl->cam_eeprom_state = CAM_EEPROM_INIT;
+	//ASUS_BSP Zhengwei +++ "read eeprom info for ois fw update"
+	if(e_ctrl->soc_info.index == 0)
+		set_rear_eeprom_ctrl(e_ctrl);
+	//ASUS_BSP Zhengwei --- "read eeprom info for ois fw update"
 
+	CAM_INFO(CAM_EEPROM,"EEPROM Probe done");
 	return rc;
 free_soc:
 	kfree(soc_private);
@@ -472,6 +477,7 @@ free_cci_client:
 	kfree(e_ctrl->io_master_info.cci_client);
 free_e_ctrl:
 	kfree(e_ctrl);
+	CAM_INFO(CAM_EEPROM,"EEPROM Probe failed");
 	return rc;
 }
 

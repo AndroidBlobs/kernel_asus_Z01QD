@@ -16,7 +16,11 @@
 #include "cam_cci_core.h"
 
 #define CCI_MAX_DELAY 1000000
-
+//ASUS_BSP Zhengwei +++ "Add mutex for cci config"
+#define DEFINE_MSM_MUTEX(mutexname) \
+	static struct mutex mutexname = __MUTEX_INITIALIZER(mutexname)
+DEFINE_MSM_MUTEX(msm_cci_mutex);
+//ASUS_BSP Zhengwei --- "Add mutex for cci config"
 static struct v4l2_subdev *g_cci_subdev;
 
 struct v4l2_subdev *cam_cci_get_subdev(void)
@@ -36,7 +40,9 @@ static long cam_cci_subdev_ioctl(struct v4l2_subdev *sd,
 
 	switch (cmd) {
 	case VIDIOC_MSM_CCI_CFG:
+		mutex_lock(&msm_cci_mutex);//ASUS_BSP Zhengwei "Add mutex for cci config"
 		rc = cam_cci_core_cfg(sd, arg);
+		mutex_unlock(&msm_cci_mutex);//ASUS_BSP Zhengwei "Add mutex for cci config"
 		break;
 	case VIDIOC_CAM_CONTROL:
 		break;

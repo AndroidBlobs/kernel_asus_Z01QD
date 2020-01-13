@@ -508,10 +508,11 @@ int cam_hw_cdm_submit_bl(struct cam_hw_info *cdm_hw,
 		}
 
 		if (!rc) {
+                        //ASUS_BSP QC Patch for fix bokeh no preview frame +++
 			CAM_DBG(CAM_CDM,
-				"write BL success for cnt=%d with tag=%d",
-				i, core->bl_tag);
-
+				"write BL success for cnt=%d with tag=%d total_cnt",
+				i, core->bl_tag, req->data->cmd_arrary_count);
+                        //ASUS_BSP QC Patch for fix bokeh no preview frame ---
 			CAM_DBG(CAM_CDM, "Now commit the BL");
 			if (cam_hw_cdm_commit_bl_write(cdm_hw)) {
 				CAM_ERR(CAM_CDM,
@@ -550,18 +551,20 @@ static void cam_hw_cdm_work(struct work_struct *work)
 		cdm_hw = payload->hw;
 		core = (struct cam_cdm *)cdm_hw->core_info;
 
-		CAM_DBG(CAM_CDM, "IRQ status=%x", payload->irq_status);
+		CAM_DBG(CAM_CDM, "IRQ status=0x%x", payload->irq_status); //ASUS_BSP QC Patch for fix bokeh no preview frame
 		if (payload->irq_status &
 			CAM_CDM_IRQ_STATUS_INFO_INLINE_IRQ_MASK) {
-			struct cam_cdm_bl_cb_request_entry *node;
+                        //ASUS_BSP QC Patch for fix bokeh no preview frame +++
+			struct cam_cdm_bl_cb_request_entry *node, *tnode;
 
-			CAM_DBG(CAM_CDM, "inline IRQ data=%x",
+			CAM_DBG(CAM_CDM, "inline IRQ data=0x%x",
 				payload->irq_data);
+                        //ASUS_BSP QC Patch for fix bokeh no preview frame ---
 			mutex_lock(&cdm_hw->hw_mutex);
-			node = cam_cdm_find_request_by_bl_tag(
-					payload->irq_data,
-					&core->bl_request_list);
-			if (node) {
+                        //ASUS_BSP QC Patch for fix bokeh no preview frame +++
+			list_for_each_entry_safe(node, tnode,
+					&core->bl_request_list, entry) {
+                        //ASUS_BSP QC Patch for fix bokeh no preview frame ---
 				if (node->request_type ==
 					CAM_HW_CDM_BL_CB_CLIENT) {
 					cam_cdm_notify_clients(cdm_hw,
@@ -574,11 +577,13 @@ static void cam_hw_cdm_work(struct work_struct *work)
 						node->request_type);
 				}
 				list_del_init(&node->entry);
+                                //ASUS_BSP QC Patch for fix bokeh no preview frame +++
+				if (node->bl_tag == payload->irq_data) {
+					kfree(node);
+					break;
+				}
+                                //ASUS_BSP QC Patch for fix bokeh no preview frame ---
 				kfree(node);
-			} else {
-				CAM_ERR(CAM_CDM,
-					"Inval node, inline_irq st=%x data=%x",
-					payload->irq_status, payload->irq_data);
 			}
 			mutex_unlock(&cdm_hw->hw_mutex);
 		}
@@ -680,12 +685,13 @@ irqreturn_t cam_hw_cdm_irq(int irq_num, void *data)
 		if (cam_cdm_write_hw_reg(cdm_hw, CDM_IRQ_CLEAR,
 			payload->irq_status))
 			CAM_ERR(CAM_CDM, "Failed to Write CDM HW IRQ Clear");
+		work_status = queue_work(cdm_core->work_queue, &payload->work); //ASUS_BSP QC Patch for fix bokeh no preview frame
 		if (cam_cdm_write_hw_reg(cdm_hw, CDM_IRQ_CLEAR_CMD, 0x01))
 			CAM_ERR(CAM_CDM, "Failed to Write CDM HW IRQ cmd");
-		work_status = queue_work(cdm_core->work_queue, &payload->work);
+
 		if (work_status == false) {
-			CAM_ERR(CAM_CDM, "Failed to queue work for irq=%x",
-				payload->irq_status);
+			CAM_ERR(CAM_CDM, "Failed to queue work for irq=0x%x",
+				payload->irq_status); //ASUS_BSP QC Patch for fix bokeh no preview frame 
 			kfree(payload);
 		}
 	}

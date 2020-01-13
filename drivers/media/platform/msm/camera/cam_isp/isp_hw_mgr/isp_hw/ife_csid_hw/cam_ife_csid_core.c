@@ -2633,18 +2633,23 @@ static int cam_ife_csid_sof_irq_debug(
 
 	if (*((uint32_t *)cmd_args) == 1)
 		sof_irq_enable = true;
-
-	val = cam_io_r_mb(soc_info->reg_map[0].mem_base +
-			csid_reg->ipp_reg->csid_ipp_irq_mask_addr);
-
+        //ASUS_BSP Byron add protection for avoid CTS-V raw exposure test make kernel panic +++
+	if(csid_reg->ipp_reg != NULL){
+		val = cam_io_r_mb(soc_info->reg_map[0].mem_base +
+		            csid_reg->ipp_reg->csid_ipp_irq_mask_addr);
+	}
+        //ASUS_BSP Byron add protection for avoid CTS-V raw exposure test make kernel panic ---
 	if (val) {
 		if (sof_irq_enable)
 			val |= CSID_PATH_INFO_INPUT_SOF;
 		else
 			val &= ~CSID_PATH_INFO_INPUT_SOF;
-
-		cam_io_w_mb(val, soc_info->reg_map[0].mem_base +
-			csid_reg->ipp_reg->csid_ipp_irq_mask_addr);
+                //ASUS_BSP Byron add protection for avoid CTS-V raw exposure test make kernel panic +++
+		if(csid_reg->ipp_reg != NULL){
+			cam_io_w_mb(val, soc_info->reg_map[0].mem_base +
+				csid_reg->ipp_reg->csid_ipp_irq_mask_addr);
+		}
+                //ASUS_BSP Byron add protection for avoid CTS-V raw exposure test make kernel panic ---
 		val = 0;
 	}
 

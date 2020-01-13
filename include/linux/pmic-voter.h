@@ -33,6 +33,7 @@ int get_effective_result(struct votable *votable);
 int get_effective_result_locked(struct votable *votable);
 const char *get_effective_client(struct votable *votable);
 const char *get_effective_client_locked(struct votable *votable);
+int asus_exclusive_vote(struct votable *votable, const char *client_str, bool enabled, int val);	//ASUS BSP +++
 int vote(struct votable *votable, const char *client_str, bool state, int val);
 int rerun_election(struct votable *votable);
 struct votable *find_votable(const char *name);

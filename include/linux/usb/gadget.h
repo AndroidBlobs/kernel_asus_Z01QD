@@ -540,6 +540,7 @@ struct usb_gadget {
 	bool				l1_supported;
 	bool				is_chipidea;
 	bool				self_powered;
+	bool				dwc_disconnect;
 };
 #define work_to_gadget(w)	(container_of((w), struct usb_gadget, work))
 

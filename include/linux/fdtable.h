@@ -22,9 +22,15 @@
  */
 #define NR_OPEN_DEFAULT BITS_PER_LONG
 
+struct fdt_user{
+	pid_t remover;
+	pid_t installer;
+};
+
 struct fdtable {
 	unsigned int max_fds;
 	struct file __rcu **fd;      /* current fd array */
+	struct fdt_user *user;
 	unsigned long *close_on_exec;
 	unsigned long *open_fds;
 	unsigned long *full_fds_bits;
@@ -63,6 +69,7 @@ struct files_struct {
 	unsigned long open_fds_init[1];
 	unsigned long full_fds_bits_init[1];
 	struct file __rcu * fd_array[NR_OPEN_DEFAULT];
+	struct fdt_user user_array[NR_OPEN_DEFAULT];
 };
 
 struct file_operations;

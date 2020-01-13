@@ -13,6 +13,43 @@
 #include <linux/printk.h>
 #include <asm/byteorder.h>
 #include <uapi/linux/kernel.h>
+#include <linux/asusdebug.h>
+
+// +++ ASUS_BSP : add for miniporting
+enum DEVICE_HWID
+{
+	//ZS600KL
+	ZS600KL_SR1EVB = 0x0,
+	ZS600KL_PROTO = 0x1,
+	ZS600KL_SR1 = 0x2,
+	ZS600KL_SR2 = 0x3,	
+	ZS600KL_ER1 = 0x4,
+        ZS600KL_ERAC = 0x5,
+	ZS600KL_PR1  = 0x6,
+        ZS600KL_MP  = 0x7,
+	ZS600KL_UNKNOWN = 0xFF
+};
+extern enum DEVICE_HWID g_ASUS_hwID;
+
+enum DEVICE_SKUID
+{
+	//ZS600KL PRJ
+	ZS600KL_SKU_ID_0 = 0x0,
+	ZS600KL_SKU_ID_1 = 0x1,
+	ZS600KL_SKU_ID_2 = 0x2,
+	ZS600KL_SKU_ID_3 = 0x3,
+	ZS600KL_SKU_ID_4 = 0x4,
+	ZS600KL_SKU_ID_5 = 0x5,
+	ZS600KL_SKU_ID_6 = 0x6,
+	ZS600KL_SKU_ID_7 = 0x7,
+	ZS600KL_UNKNOWN_PRJ = 0xFF
+};
+extern enum DEVICE_SKUID g_ASUS_skuID;
+// --- ASUS_BSP : add for miniporting
+
+#ifdef ASUS_ENABLE_PROXIMITY_DISABLE_TOUCH
+#define ASUS_AUDIO_MODE_PORTING_COMPLETED 1 /* ASUS_BSP Paul +++ */
+#endif
 
 #define USHRT_MAX	((u16)(~0U))
 #define SHRT_MAX	((s16)(USHRT_MAX>>1))

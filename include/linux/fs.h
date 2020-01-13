@@ -238,6 +238,8 @@ typedef int (dio_iodone_t)(struct kiocb *iocb, loff_t offset,
 #define WHITEOUT_MODE 0
 #define WHITEOUT_DEV 0
 
+#define f_dentry	f_path.dentry
+
 /*
  * This is the Inode Attributes structure, used for notify_change().  It
  * uses the above definitions as flags, to know which values have changed.

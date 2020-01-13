@@ -1650,6 +1650,9 @@ struct sched_rt_entity {
 	/* rq "owned" by this entity/group: */
 	struct rt_rq		*my_q;
 #endif
+
+	int binder_sender_pid;
+	int binder_sender_tid;
 };
 
 struct sched_dl_entity {

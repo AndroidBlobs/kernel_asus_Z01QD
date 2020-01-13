@@ -762,6 +762,8 @@
 #define ABS_MT_DISTANCE		0x3b	/* Contact hover distance */
 #define ABS_MT_TOOL_X		0x3c	/* Center X tool position */
 #define ABS_MT_TOOL_Y		0x3d	/* Center Y tool position */
+#define ABS_MT_POSITION_X_F	0x26	/* Center X touch position force report*/
+#define ABS_MT_POSITION_Y_F	0x27	/* Center Y touch position force report*/
 
 
 #define ABS_MAX			0x3f
@@ -793,6 +795,7 @@
 #define SW_HPHR_OVERCURRENT	0x11  /* set = over current on right hph */
 #define SW_MICROPHONE2_INSERT   0x12  /* set = inserted */
 #define SW_UNSUPPORT_INSERT	0x13  /* set = unsupported device inserted */
+#define SW_STATION_INSERT 0x14    /* station inserted */
 #define SW_MAX			0x20
 #define SW_CNT			(SW_MAX+1)
 

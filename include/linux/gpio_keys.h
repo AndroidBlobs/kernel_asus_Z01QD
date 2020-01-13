@@ -53,6 +53,8 @@ struct gpio_keys_platform_data {
 	int (*enable)(struct device *dev);
 	void (*disable)(struct device *dev);
 	const char *name;
+	struct extcon_dev *pmsp_dev_extcon;
+	struct extcon_dev *pm_dumpthread_dev_extcon;
 };
 
 #endif
